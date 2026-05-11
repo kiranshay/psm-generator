@@ -203,23 +203,28 @@ test('canSubmitDraft: draft with content → true', () => {
 const SERVER_TS = Symbol("server-ts");
 const FIELD_VALUE_STUB = { serverTimestamp: () => SERVER_TS };
 
-function makeDraftPayload({assignmentId, answersText, answersByWorksheet, catalogByWorksheetId, isCreate, FieldValue}){
+// Kept in sync with the canonical implementation in app.jsx.
+// Session 18A: flagsByWorksheet added (parallel shape to answersByWorksheet).
+function makeDraftPayload({assignmentId, answersText, answersByWorksheet, flagsByWorksheet, catalogByWorksheetId, isCreate, FieldValue}){
   let responses;
   if(answersByWorksheet && catalogByWorksheetId){
     responses = [];
     for(const wId of Object.keys(answersByWorksheet)){
       const answers = answersByWorksheet[wId] || [];
+      const flags = (flagsByWorksheet && flagsByWorksheet[wId]) || [];
       const expectedLength = catalogByWorksheetId[wId]?.questionIds?.length ?? answers.length;
       for(let i=0; i<expectedLength; i++){
+        const flag = flags[i] === "star" || flags[i] === "question" ? flags[i] : null;
         responses.push({
           worksheetId: wId,
           questionIndex: i,
           studentAnswer: typeof answers[i] === "string" ? answers[i] : "",
+          flag,
         });
       }
     }
   } else {
-    responses = [{worksheetId: null, questionIndex: 0, studentAnswer: answersText || ""}];
+    responses = [{worksheetId: null, questionIndex: 0, studentAnswer: answersText || "", flag: null}];
   }
   const base = {
     assignmentId,
@@ -265,6 +270,7 @@ test('makeDraftPayload: legacy shape sets worksheetId null', () => {
   assert.equal(p.responses[0].worksheetId, null);
   assert.equal(p.responses[0].questionIndex, 0);
   assert.equal(p.responses[0].studentAnswer, "1. B");
+  assert.equal(p.responses[0].flag, null);
 });
 
 test('makeDraftPayload: nested shape flattens per-worksheet answers tagged with worksheetId', () => {
@@ -276,11 +282,77 @@ test('makeDraftPayload: nested shape flattens per-worksheet answers tagged with 
     FieldValue: FIELD_VALUE_STUB,
   });
   assert.equal(p.responses.length, 5);
-  assert.deepEqual(p.responses[0], {worksheetId:"w1", questionIndex:0, studentAnswer:"A"});
-  assert.deepEqual(p.responses[1], {worksheetId:"w1", questionIndex:1, studentAnswer:"B"});
-  assert.deepEqual(p.responses[2], {worksheetId:"w1", questionIndex:2, studentAnswer:""});
-  assert.deepEqual(p.responses[3], {worksheetId:"w2", questionIndex:0, studentAnswer:"42"});
-  assert.deepEqual(p.responses[4], {worksheetId:"w2", questionIndex:1, studentAnswer:""});
+  // Session 18A: every response now carries a `flag` field. When
+  // no flags were passed, all default to null.
+  assert.deepEqual(p.responses[0], {worksheetId:"w1", questionIndex:0, studentAnswer:"A", flag:null});
+  assert.deepEqual(p.responses[1], {worksheetId:"w1", questionIndex:1, studentAnswer:"B", flag:null});
+  assert.deepEqual(p.responses[2], {worksheetId:"w1", questionIndex:2, studentAnswer:"", flag:null});
+  assert.deepEqual(p.responses[3], {worksheetId:"w2", questionIndex:0, studentAnswer:"42", flag:null});
+  assert.deepEqual(p.responses[4], {worksheetId:"w2", questionIndex:1, studentAnswer:"", flag:null});
+});
+
+// ── Session 18A: per-question flag passthrough ───────────────────────────
+
+test('makeDraftPayload: flagsByWorksheet passed through into responses', () => {
+  const p = makeDraftPayload({
+    assignmentId: "asg3",
+    answersByWorksheet: {w1: ["A","B","C","D"]},
+    flagsByWorksheet: {w1: ["star", "question", null, "star"]},
+    catalogByWorksheetId: {w1: {questionIds: ["q1","q2","q3","q4"]}},
+    isCreate: false,
+    FieldValue: FIELD_VALUE_STUB,
+  });
+  assert.equal(p.responses.length, 4);
+  assert.equal(p.responses[0].flag, "star");
+  assert.equal(p.responses[1].flag, "question");
+  assert.equal(p.responses[2].flag, null);
+  assert.equal(p.responses[3].flag, "star");
+});
+
+test('makeDraftPayload: missing flagsByWorksheet defaults every flag to null', () => {
+  const p = makeDraftPayload({
+    assignmentId: "asg4",
+    answersByWorksheet: {w1: ["A","B"]},
+    // flagsByWorksheet omitted
+    catalogByWorksheetId: {w1: {questionIds: ["q1","q2"]}},
+    isCreate: false,
+    FieldValue: FIELD_VALUE_STUB,
+  });
+  assert.equal(p.responses[0].flag, null);
+  assert.equal(p.responses[1].flag, null);
+});
+
+test('makeDraftPayload: bad flag values get coerced to null', () => {
+  // Defense-in-depth: any value other than "star" / "question" → null
+  // so a typo or stale field can never poison the grader.
+  const p = makeDraftPayload({
+    assignmentId: "asg5",
+    answersByWorksheet: {w1: ["A","B","C"]},
+    flagsByWorksheet: {w1: ["star", "", "bogus"]},
+    catalogByWorksheetId: {w1: {questionIds: ["q1","q2","q3"]}},
+    isCreate: false,
+    FieldValue: FIELD_VALUE_STUB,
+  });
+  assert.equal(p.responses[0].flag, "star");
+  assert.equal(p.responses[1].flag, null);
+  assert.equal(p.responses[2].flag, null);
+});
+
+test('makeDraftPayload: flag preserved on empty answer', () => {
+  // The student can mark "?" without ever typing — the flag is
+  // independent of the answer string. Common when they realize
+  // they have no clue and want to skip.
+  const p = makeDraftPayload({
+    assignmentId: "asg6",
+    answersByWorksheet: {w1: ["", "A"]},
+    flagsByWorksheet: {w1: ["question", null]},
+    catalogByWorksheetId: {w1: {questionIds: ["q1","q2"]}},
+    isCreate: true,
+    FieldValue: FIELD_VALUE_STUB,
+  });
+  assert.equal(p.responses[0].studentAnswer, "");
+  assert.equal(p.responses[0].flag, "question");
+  assert.equal(p.responses[1].flag, null);
 });
 
 test('canSubmitDraft: nested — true when any entry is non-empty', () => {

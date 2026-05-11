@@ -1224,26 +1224,31 @@ function canSubmitDraft(submission){
   return false;
 }
 
-function makeDraftPayload({assignmentId, answersText, answersByWorksheet, catalogByWorksheetId, isCreate}){
+function makeDraftPayload({assignmentId, answersText, answersByWorksheet, flagsByWorksheet, catalogByWorksheetId, isCreate}){
   const FV = firebase.firestore.FieldValue;
   let responses;
   if(answersByWorksheet && catalogByWorksheetId){
     // Nested shape — one entry per question per worksheet, flat + tagged.
+    // Session 18A: optional flagsByWorksheet[wId][i] ∈ {"star","question",null}.
+    // Always included so the grader can read it; null = no flag (legacy).
     responses = [];
     for(const wId of Object.keys(answersByWorksheet)){
       const answers = answersByWorksheet[wId] || [];
+      const flags = (flagsByWorksheet && flagsByWorksheet[wId]) || [];
       const expectedLength = catalogByWorksheetId[wId]?.questionIds?.length ?? answers.length;
       for(let i=0; i<expectedLength; i++){
+        const flag = flags[i] === "star" || flags[i] === "question" ? flags[i] : null;
         responses.push({
           worksheetId: wId,
           questionIndex: i,
           studentAnswer: typeof answers[i] === "string" ? answers[i] : "",
+          flag,
         });
       }
     }
   } else {
     // Legacy single-blob shape — zero-worksheet fallback or Phase 2 resume.
-    responses = [{worksheetId: null, questionIndex: 0, studentAnswer: answersText || ""}];
+    responses = [{worksheetId: null, questionIndex: 0, studentAnswer: answersText || "", flag: null}];
   }
   const base = {
     assignmentId,
@@ -5102,6 +5107,68 @@ function InlinePdfViewer({url}){
   );
 }
 
+// Session 18A: per-question flag toggle. Two small buttons next to each
+// answer slot — star ("I had trouble but answered") and ? ("I had no
+// clue, leaving blank intentionally"). Mutually exclusive; clicking the
+// active flag clears it. Star is informational; ? causes the grader to
+// treat the answer as blank.
+function FlagToggle({flag, onToggle}){
+  const btn = (active, color, bg) => ({
+    width:22, height:22, borderRadius:4, padding:0,
+    border:`1px solid ${active?color:"rgba(15,26,46,.18)"}`,
+    background: active?bg:"transparent",
+    color: active?color:"#9AA3B8",
+    fontFamily:"'IBM Plex Mono',monospace", fontSize:13, fontWeight:700,
+    cursor:"pointer", lineHeight:1,
+    display:"inline-flex", alignItems:"center", justifyContent:"center",
+  });
+  const starOn = flag === "star";
+  const qOn = flag === "question";
+  return (
+    <span style={{display:"inline-flex", gap:4, flexShrink:0}}>
+      <button
+        type="button"
+        title={starOn ? "Clear star (you marked: had trouble)" : "Star: I had trouble on this question"}
+        onClick={()=> onToggle("star")}
+        style={btn(starOn, "#9A5B1F", "#FFF1DE")}
+      >★</button>
+      <button
+        type="button"
+        title={qOn ? "Clear ? (you marked: no clue, leave blank — counts as 0)" : "? : I had no clue — leave blank, counts as 0"}
+        onClick={()=> onToggle("question")}
+        style={btn(qOn, "#5C4178", "#EFE8F5")}
+      >?</button>
+    </span>
+  );
+}
+
+// Read-only flag badge for the locked / submitted view. Shows whatever
+// flag was on the response when it was submitted.
+function FlagBadge({flag}){
+  if(!flag) return <span style={{width:22, flexShrink:0}}/>;
+  if(flag === "star"){
+    return (
+      <span title="Student starred: had trouble" style={{
+        width:22, height:22, borderRadius:4, flexShrink:0,
+        display:"inline-flex", alignItems:"center", justifyContent:"center",
+        background:"#FFF1DE", color:"#9A5B1F",
+        fontFamily:"'IBM Plex Mono',monospace", fontSize:13, fontWeight:700,
+      }}>★</span>
+    );
+  }
+  if(flag === "question"){
+    return (
+      <span title="Student marked ?: no clue, intentionally blank" style={{
+        width:22, height:22, borderRadius:4, flexShrink:0,
+        display:"inline-flex", alignItems:"center", justifyContent:"center",
+        background:"#EFE8F5", color:"#5C4178",
+        fontFamily:"'IBM Plex Mono',monospace", fontSize:13, fontWeight:700,
+      }}>?</span>
+    );
+  }
+  return <span style={{width:22, flexShrink:0}}/>;
+}
+
 // Session 15: per-question correctness indicator rendered to the right of
 // each answer row when the submission is graded and locked. Receives the
 // perQuestion[i] entry from the submission doc (may be null for skipped).
@@ -5163,7 +5230,7 @@ function AnswerResultIndicator({result}){
 // Session 15: `results` is an optional per-question array from the graded
 // submission doc, indexed by questionIndex. When present (and isLocked),
 // each row renders a correctness glyph next to the answer.
-function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, isLocked, indexLabel, results}){
+function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flags, onFlagsChange, isLocked, indexLabel, results}){
   const hasCatalog = !!(catalogEntry && Array.isArray(catalogEntry.questionIds) && catalogEntry.questionIds.length > 0);
   const format = hasCatalog ? catalogEntry.answerFormat : null;
   const pdfUrl = (catalogEntry && catalogEntry.stu) || worksheet.url || null;
@@ -5177,6 +5244,19 @@ function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, isLo
     while(next.length <= i) next.push("");
     next[i] = value;
     onAnswersChange(next);
+  };
+
+  // Session 18A: per-question flag toggle. Click star → set/clear star;
+  // click ? → set/clear question. Clicking the active flag clears it.
+  // Both flags are mutually exclusive on a given question (toggling on
+  // one clears the other).
+  const setFlagAt = (i, value) => {
+    if(isLocked) return;
+    if(!onFlagsChange) return;
+    const next = (flags || []).slice();
+    while(next.length <= i) next.push(null);
+    next[i] = next[i] === value ? null : value;
+    onFlagsChange(next);
   };
 
   const renderRow = (i) => {
@@ -5215,22 +5295,32 @@ function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, isLo
       {hasCatalog ? (
         // Session 15: widen the answer column when graded to accommodate
         // the per-row correctness indicator + correct-answer reveal.
-        <div style={{display:"grid", gridTemplateColumns: (isLocked && results) ? "minmax(0, 1fr) 340px" : "minmax(0, 1fr) 260px", gap:20, alignItems:"start"}}>
+        // Session 18A: widened a bit more to fit the star/? flag toggles.
+        <div style={{display:"grid", gridTemplateColumns: (isLocked && results) ? "minmax(0, 1fr) 380px" : "minmax(0, 1fr) 300px", gap:20, alignItems:"start"}}>
           <InlinePdfViewer url={pdfUrl}/>
           <div style={{display:"flex", flexDirection:"column", gap:8}}>
-            {catalogEntry.questionIds.map((_qid, i) => (
-              <div key={i} style={{display:"flex", alignItems:"center", gap:10, padding:"6px 0", borderBottom:"1px solid rgba(15,26,46,.05)"}}>
-                <div style={{fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:"#66708A", width:24, flexShrink:0}}>
-                  {i+1}.
+            {catalogEntry.questionIds.map((_qid, i) => {
+              const currentFlag = (flags && flags[i]) || null;
+              return (
+                <div key={i} style={{display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:"1px solid rgba(15,26,46,.05)"}}>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:"#66708A", width:24, flexShrink:0}}>
+                    {i+1}.
+                  </div>
+                  <div style={{flex:1, minWidth:0}}>
+                    {renderRow(i)}
+                  </div>
+                  {!isLocked && (
+                    <FlagToggle flag={currentFlag} onToggle={(v)=> setFlagAt(i, v)}/>
+                  )}
+                  {isLocked && (
+                    <FlagBadge flag={(results && results[i] && results[i].flag) || currentFlag}/>
+                  )}
+                  {isLocked && results && (
+                    <AnswerResultIndicator result={results[i]}/>
+                  )}
                 </div>
-                <div style={{flex:1, minWidth:0}}>
-                  {renderRow(i)}
-                </div>
-                {isLocked && results && (
-                  <AnswerResultIndicator result={results[i]}/>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : (
@@ -5379,6 +5469,9 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
 
   // State
   const [answersByWorksheet, setAnswersByWorksheet] = useState({});
+  // Session 18A: parallel-shape state for per-question flags.
+  // flagsByWorksheet[wId][i] ∈ {"star", "question", null}.
+  const [flagsByWorksheet, setFlagsByWorksheet] = useState({});
   const [legacyText, setLegacyText] = useState("");
   const submissionIdRef = useRef(null);
   const [localStatus, setLocalStatus] = useState("draft");
@@ -5400,27 +5493,38 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
       return;
     }
 
-    // Group existing responses by worksheetId.
-    const grouped = {};
+    // Group existing responses + flags by worksheetId.
+    const groupedAns = {};
+    const groupedFlags = {};
     if(Array.isArray(submission.responses)){
       for(const r of submission.responses){
         const wId = r.worksheetId;
         if(!wId) continue;
-        if(!grouped[wId]) grouped[wId] = [];
-        grouped[wId][r.questionIndex] = r.studentAnswer || "";
+        if(!groupedAns[wId]) groupedAns[wId] = [];
+        if(!groupedFlags[wId]) groupedFlags[wId] = [];
+        groupedAns[wId][r.questionIndex] = r.studentAnswer || "";
+        groupedFlags[wId][r.questionIndex] = (r.flag === "star" || r.flag === "question") ? r.flag : null;
       }
     }
     // Pad each worksheet's array to its expected length.
-    const next = {};
+    const nextAns = {};
+    const nextFlags = {};
     for(const w of worksheetsStable){
       const entry = catalogByWorksheetId[w.id];
       const expected = entry?.questionIds?.length || 1;
-      const existing = grouped[w.id] || [];
-      const padded = [];
-      for(let i=0; i<expected; i++) padded.push(existing[i] || "");
-      next[w.id] = padded;
+      const existingAns = groupedAns[w.id] || [];
+      const existingFlags = groupedFlags[w.id] || [];
+      const paddedAns = [];
+      const paddedFlags = [];
+      for(let i=0; i<expected; i++){
+        paddedAns.push(existingAns[i] || "");
+        paddedFlags.push(existingFlags[i] || null);
+      }
+      nextAns[w.id] = paddedAns;
+      nextFlags[w.id] = paddedFlags;
     }
-    setAnswersByWorksheet(next);
+    setAnswersByWorksheet(nextAns);
+    setFlagsByWorksheet(nextFlags);
   }, [status, submission, legacyMode, catalogByWorksheetId, worksheetsStable]);
 
   const isLockedNow = readOnly || localStatus === "submitted";
@@ -5438,6 +5542,7 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
       : makeDraftPayload({
           assignmentId: assignment.id,
           answersByWorksheet,
+          flagsByWorksheet,
           catalogByWorksheetId,
           isCreate: !submissionIdRef.current,
         });
@@ -5488,7 +5593,7 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
     }
   };
 
-  // Debounced autosave on any answer change.
+  // Debounced autosave on any answer or flag change.
   useEffect(()=>{
     if(isLockedNow) return;
     if(status !== "ready" && status !== "not-found") return;
@@ -5497,7 +5602,7 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
       if(writeDraftRef.current) writeDraftRef.current();
     }, 750);
     return ()=>{ if(pendingTimerRef.current) clearTimeout(pendingTimerRef.current); };
-  }, [answersByWorksheet, legacyText, status, isLockedNow]);
+  }, [answersByWorksheet, flagsByWorksheet, legacyText, status, isLockedNow]);
 
   // Session 15: auto-grade data from the onSubmissionSubmit trigger.
   // Group submission.perQuestion[] by worksheetId → array indexed by questionIndex.
@@ -5659,6 +5764,8 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose}){
             catalogEntry={catalogByWorksheetId[w.id]}
             answers={answersByWorksheet[w.id] || []}
             onAnswersChange={(next)=> setAnswersByWorksheet(prev => ({...prev, [w.id]: next}))}
+            flags={flagsByWorksheet[w.id] || []}
+            onFlagsChange={(next)=> setFlagsByWorksheet(prev => ({...prev, [w.id]: next}))}
             isLocked={isLocked}
             indexLabel={`Worksheet ${idx+1} of ${worksheetsStable.length}`}
             results={perQuestionByWorksheet[w.id]}

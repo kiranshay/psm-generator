@@ -201,24 +201,36 @@ function gradeSubmission({ submission, assignment, catalogByTitle, questionKeysB
     const qid = qIds[qi];
     const key = questionKeysById.get(qid);
     if (!key || key.correctAnswer === undefined) {
-      perQuestion.push({ worksheetId: wId, questionIndex: qi, questionId: qid, correct: null, skipReason: "missing-key" });
+      perQuestion.push({ worksheetId: wId, questionIndex: qi, questionId: qid, correct: null, skipReason: "missing-key", flag: r.flag || null });
       continue;
     }
 
-    const isCorrect = gradeOne(studentAnswer, key.correctAnswer);
+    // Session 18A: per-question flag semantics.
+    //   flag === "question" → student intentionally left blank.
+    //     Treat as an incorrect answer; ignore whatever studentAnswer
+    //     contains. Counts toward scoreTotal but never increments
+    //     scoreCorrect. Surfaced to the tutor as a "?" indicator on
+    //     the response row so they know the student bailed out.
+    //   flag === "star"    → purely informational, no grade effect.
+    //     Surfaced as a star icon next to the row. The grade happens
+    //     normally against the student's actual answer.
+    //   flag absent/null   → unchanged behavior (legacy).
+    const flag = r.flag || null;
+    let isCorrect;
+    if (flag === "question") {
+      isCorrect = false;
+    } else {
+      isCorrect = gradeOne(studentAnswer, key.correctAnswer);
+    }
     scoreTotal += 1;
     if (isCorrect) scoreCorrect += 1;
-    // Session 15 option C (Kiran directive): expose the stored correct
-    // answer on every graded perQuestion entry so the student-side UI
-    // can show "key: X" next to each row. The spec originally said
-    // never reveal the answer bank, but Kiran overrode that for
-    // pedagogical feedback. Skipped questions don't get a correctAnswer.
     perQuestion.push({
       worksheetId: wId,
       questionIndex: qi,
       questionId: qid,
       correct: isCorrect,
       correctAnswer: key.correctAnswer,
+      flag,
     });
   }
 

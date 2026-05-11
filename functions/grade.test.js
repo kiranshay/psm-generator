@@ -336,3 +336,89 @@ test("gradeSubmission: assignment with no worksheets skipped", () => {
   assert.equal(res.status, "skipped");
   assert.equal(res.reason, "assignment-has-no-worksheets");
 });
+
+// ── Session 18A: per-question flag semantics ─────────────────────────────
+
+test("gradeSubmission: flag='question' counts as incorrect, ignores studentAnswer", () => {
+  const { assignment, catalogByTitle, questionKeysById } = makeFixture();
+  // Student typed "A" (the correct answer) but flagged with ? — should
+  // grade as incorrect because the ? means "I had no clue, leaving blank".
+  const submission = {
+    responses: [
+      { worksheetId: "w1", questionIndex: 0, studentAnswer: "A", flag: "question" },
+      { worksheetId: "w1", questionIndex: 1, studentAnswer: "B" },
+      { worksheetId: "w1", questionIndex: 2, studentAnswer: "C" },
+    ],
+  };
+  const res = gradeSubmission({ submission, assignment, catalogByTitle, questionKeysById });
+  assert.equal(res.status, "graded");
+  assert.equal(res.scoreCorrect, 2);
+  assert.equal(res.scoreTotal, 3);
+  assert.equal(res.perQuestion[0].correct, false);
+  assert.equal(res.perQuestion[0].flag, "question");
+  assert.equal(res.perQuestion[1].correct, true);
+  assert.equal(res.perQuestion[1].flag, null);
+});
+
+test("gradeSubmission: flag='star' has no grading effect, just passes through", () => {
+  const { assignment, catalogByTitle, questionKeysById } = makeFixture();
+  // Student got Q1 right and starred it; got Q2 wrong and starred it.
+  // Star is informational — doesn't change the grade either way.
+  const submission = {
+    responses: [
+      { worksheetId: "w1", questionIndex: 0, studentAnswer: "A", flag: "star" },
+      { worksheetId: "w1", questionIndex: 1, studentAnswer: "X", flag: "star" },
+      { worksheetId: "w1", questionIndex: 2, studentAnswer: "C" },
+    ],
+  };
+  const res = gradeSubmission({ submission, assignment, catalogByTitle, questionKeysById });
+  assert.equal(res.status, "graded");
+  assert.equal(res.scoreCorrect, 2);
+  assert.equal(res.scoreTotal, 3);
+  assert.equal(res.perQuestion[0].correct, true);
+  assert.equal(res.perQuestion[0].flag, "star");
+  assert.equal(res.perQuestion[1].correct, false);
+  assert.equal(res.perQuestion[1].flag, "star");
+  assert.equal(res.perQuestion[2].flag, null);
+});
+
+test("gradeSubmission: legacy submissions without flag field grade normally", () => {
+  const { assignment, catalogByTitle, questionKeysById } = makeFixture();
+  // Backward compat: nothing on the response has `flag`. All perQuestion
+  // entries get flag: null and the grade is identical to pre-Session-18A.
+  const submission = {
+    responses: [
+      { worksheetId: "w1", questionIndex: 0, studentAnswer: "A" },
+      { worksheetId: "w1", questionIndex: 1, studentAnswer: "B" },
+    ],
+  };
+  const res = gradeSubmission({ submission, assignment, catalogByTitle, questionKeysById });
+  assert.equal(res.status, "graded");
+  assert.equal(res.scoreCorrect, 2);
+  assert.equal(res.scoreTotal, 2);
+  for (const pq of res.perQuestion) {
+    assert.equal(pq.flag, null);
+  }
+});
+
+test("gradeSubmission: flag preserved on missing-key skip path", () => {
+  const { assignment, catalogByTitle } = makeFixture();
+  // Empty questionKeysById — every question hits the missing-key path.
+  // Flag should still be on the perQuestion entry for tutor display.
+  const submission = {
+    responses: [
+      { worksheetId: "w1", questionIndex: 0, studentAnswer: "A", flag: "star" },
+      { worksheetId: "w1", questionIndex: 1, studentAnswer: "", flag: "question" },
+    ],
+  };
+  const res = gradeSubmission({
+    submission,
+    assignment,
+    catalogByTitle,
+    questionKeysById: new Map(),
+  });
+  assert.equal(res.status, "skipped"); // all-questions-unsupported-or-missing
+  // Skipped status doesn't return perQuestion, but the legacy "any
+  // graded question" path would; the test exists to flag if that
+  // changes. Behavior for now: perQuestion is not returned on skip.
+});
