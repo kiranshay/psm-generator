@@ -137,10 +137,11 @@ const ALL_WS = WS_RAW.map(([subject,domain,subdomain,difficulty,qs,title,stu,key
   id:`${subject}|${domain}|${subdomain}|${difficulty}|${title}`,
   isComprehensiveGroup: subdomain.startsWith("Comprehensive "),
 }));
-// Ensure "Circles - Easy" exists (missing from WS_RAW)
-if(!ALL_WS.find(ws=>ws.subdomain==="Circles"&&ws.difficulty==="easy")){
-  ALL_WS.push({subject:"Math",domain:"Geometry & Trigonometry",subdomain:"Circles",difficulty:"easy",qs:0,title:"Circles - Easy (Inactive)",stu:"",key:"",id:"Math|Geometry & Trigonometry|Circles|easy|Circles - Easy (Inactive)",isComprehensiveGroup:false});
-}
+// Session 18A: dropped the "Circles - Easy (Inactive)" placeholder that
+// was injected to fill a (subdomain, difficulty) hole that no longer
+// exists in WS_RAW. Circles is present at Medium / Hard / Comprehensive
+// difficulty and the UI handles absent (subdomain, difficulty) combos
+// gracefully — no placeholder needed.
 
 /* ============ WELLED DOMAIN ASSIGNMENTS ============ */
 // R&W: 27 Qs each. Math: 22 Qs. Geo & PSDA only Easy/Hard.
