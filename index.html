@@ -5903,13 +5903,35 @@ function AnswerResultIndicator({result}){
 // Session 15: `results` is an optional per-question array from the graded
 // submission doc, indexed by questionIndex. When present (and isLocked),
 // each row renders a correctness glyph next to the answer.
+// Session 18A: returns true when this question index is included in the
+// assigned subset. Display numbers are 1-indexed; array indices are
+// 0-indexed. ODD subset = display 1,3,5,... = i % 2 === 0. EVEN subset
+// = display 2,4,6,... = i % 2 === 1. "ALL" / null / undefined / "" =
+// every question is in the subset.
+function isInSubset(i, subset){
+  const s = (subset || "").toUpperCase();
+  if(s === "EVEN") return i % 2 === 1;
+  if(s === "ODD") return i % 2 === 0;
+  return true;
+}
+
 function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flags, onFlagsChange, isLocked, indexLabel, results}){
   const hasCatalog = !!(catalogEntry && Array.isArray(catalogEntry.questionIds) && catalogEntry.questionIds.length > 0);
   const format = hasCatalog ? catalogEntry.answerFormat : null;
   const pdfUrl = (catalogEntry && catalogEntry.stu) || worksheet.url || null;
+  // Session 18A: subset = "EVEN" | "ODD" | null (= all). Render full list
+  // but mark non-subset rows as inactive — the student sees the full
+  // worksheet PDF (so question numbering matches) but can only answer
+  // their assigned half.
+  const subset = worksheet.evenOdd || null;
 
   const headerTitle = worksheet.title || `${worksheet.domain||""} — ${worksheet.difficulty||""}`;
-  const headerSub = [worksheet.subject, worksheet.domain, worksheet.difficulty].filter(Boolean).join(" · ");
+  const subsetLabel = subset === "EVEN"
+    ? "even questions only"
+    : subset === "ODD"
+      ? "odd questions only"
+      : null;
+  const headerSub = [worksheet.subject, worksheet.domain, worksheet.difficulty, subsetLabel].filter(Boolean).join(" · ");
 
   const setAnswerAt = (i, value) => {
     if(isLocked) return;
@@ -5974,6 +5996,25 @@ function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flag
           <div style={{display:"flex", flexDirection:"column", gap:8}}>
             {catalogEntry.questionIds.map((_qid, i) => {
               const currentFlag = (flags && flags[i]) || null;
+              // Session 18A: render the row only if the question is in
+              // the assigned subset. Non-subset rows are shown as
+              // muted "not assigned" placeholders so the student can
+              // see which questions belong to a different half — but
+              // can't type anything into them.
+              const inSubset = isInSubset(i, subset);
+              if(!inSubset){
+                return (
+                  <div key={i} style={{display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:"1px solid rgba(15,26,46,.05)", opacity:.35}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:"#66708A", width:24, flexShrink:0}}>
+                      {i+1}.
+                    </div>
+                    <div style={{flex:1, minWidth:0, fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:"#9AA3B8", fontStyle:"italic"}}>
+                      not assigned ({subset === "EVEN" ? "even" : "odd"}-only)
+                    </div>
+                    <span style={{width:22, flexShrink:0}}/>
+                  </div>
+                );
+              }
               return (
                 <div key={i} style={{display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom:"1px solid rgba(15,26,46,.05)"}}>
                   <div style={{fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:"#66708A", width:24, flexShrink:0}}>

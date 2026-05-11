@@ -311,7 +311,19 @@ function buildPsmDescription(deepLink, worksheets, practiceExams) {
 
   if (worksheets.length > 0) {
     lines.push(``, `<b>Worksheets:</b>`, ``);
-    worksheets.forEach((w) => lines.push(`  • ${w.title}`));
+    worksheets.forEach((w) => {
+      // Session 18A: surface even/odd subset assignment so the student
+      // knows up front which half of the worksheet they're responsible
+      // for. The portal hides answer slots for the other half — Wise
+      // discussion mirrors that with a "(odd questions only)" hint.
+      const eo = String(w.evenOdd || "").toUpperCase();
+      const suffix = eo === "EVEN"
+        ? " — even questions only"
+        : eo === "ODD"
+          ? " — odd questions only"
+          : "";
+      lines.push(`  • ${w.title}${suffix}`);
+    });
   }
 
   const bbExams = practiceExams.filter((e) => e.platform === "BlueBook");

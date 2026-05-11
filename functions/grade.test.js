@@ -401,6 +401,98 @@ test("gradeSubmission: legacy submissions without flag field grade normally", ()
   }
 });
 
+// ── Session 18A: even/odd subset semantics ───────────────────────────────
+
+test("gradeSubmission: subset='ODD' grades only odd display numbers (indices 0,2)", () => {
+  const { catalogByTitle, questionKeysById } = makeFixture();
+  // assignment.worksheets[0] is "MC Worksheet" but with evenOdd: "ODD".
+  // Student supplies answers for all 3 — only display Q1 (idx 0) and
+  // Q3 (idx 2) should count. Q2 (idx 1) is skipped as not-in-subset.
+  const assignment = {
+    id: "asg1",
+    worksheets: [{ id: "w1", title: "MC Worksheet", evenOdd: "ODD" }],
+  };
+  const submission = {
+    responses: [
+      { worksheetId: "w1", questionIndex: 0, studentAnswer: "A" }, // display 1 — in subset, correct
+      { worksheetId: "w1", questionIndex: 1, studentAnswer: "B" }, // display 2 — NOT in subset (skipped)
+      { worksheetId: "w1", questionIndex: 2, studentAnswer: "X" }, // display 3 — in subset, wrong
+    ],
+  };
+  const res = gradeSubmission({ submission, assignment, catalogByTitle, questionKeysById });
+  assert.equal(res.status, "graded");
+  assert.equal(res.scoreCorrect, 1);
+  assert.equal(res.scoreTotal, 2); // only 2 questions counted
+  assert.equal(res.perQuestion[0].correct, true);
+  assert.equal(res.perQuestion[1].correct, null);
+  assert.equal(res.perQuestion[1].skipReason, "not-in-subset");
+  assert.equal(res.perQuestion[2].correct, false);
+});
+
+test("gradeSubmission: subset='EVEN' grades only even display numbers (idx 1)", () => {
+  const { catalogByTitle, questionKeysById } = makeFixture();
+  const assignment = {
+    id: "asg1",
+    worksheets: [{ id: "w1", title: "MC Worksheet", evenOdd: "EVEN" }],
+  };
+  const submission = {
+    responses: [
+      { worksheetId: "w1", questionIndex: 0, studentAnswer: "A" }, // display 1 — NOT in subset
+      { worksheetId: "w1", questionIndex: 1, studentAnswer: "B" }, // display 2 — in subset, correct
+      { worksheetId: "w1", questionIndex: 2, studentAnswer: "Z" }, // display 3 — NOT in subset
+    ],
+  };
+  const res = gradeSubmission({ submission, assignment, catalogByTitle, questionKeysById });
+  assert.equal(res.status, "graded");
+  assert.equal(res.scoreCorrect, 1);
+  assert.equal(res.scoreTotal, 1);
+  assert.equal(res.perQuestion[0].skipReason, "not-in-subset");
+  assert.equal(res.perQuestion[1].correct, true);
+  assert.equal(res.perQuestion[2].skipReason, "not-in-subset");
+});
+
+test("gradeSubmission: missing/null subset grades every question (legacy)", () => {
+  const { assignment, catalogByTitle, questionKeysById } = makeFixture();
+  // assignment from makeFixture has no evenOdd field on its worksheets
+  // — every question should count, identical to pre-Session-18A behavior.
+  const submission = {
+    responses: [
+      { worksheetId: "w1", questionIndex: 0, studentAnswer: "A" },
+      { worksheetId: "w1", questionIndex: 1, studentAnswer: "B" },
+      { worksheetId: "w1", questionIndex: 2, studentAnswer: "C" },
+    ],
+  };
+  const res = gradeSubmission({ submission, assignment, catalogByTitle, questionKeysById });
+  assert.equal(res.scoreTotal, 3);
+  assert.equal(res.scoreCorrect, 3);
+});
+
+test("gradeSubmission: subset + flag interact correctly (?-flagged in-subset still counts as wrong)", () => {
+  const { catalogByTitle, questionKeysById } = makeFixture();
+  const assignment = {
+    id: "asg1",
+    worksheets: [{ id: "w1", title: "MC Worksheet", evenOdd: "ODD" }],
+  };
+  const submission = {
+    responses: [
+      // In-subset, ?-flagged → counts but as wrong
+      { worksheetId: "w1", questionIndex: 0, studentAnswer: "A", flag: "question" },
+      // NOT in subset → skipped regardless of flag
+      { worksheetId: "w1", questionIndex: 1, studentAnswer: "B", flag: "star" },
+      // In-subset, no flag, correct
+      { worksheetId: "w1", questionIndex: 2, studentAnswer: "C" },
+    ],
+  };
+  const res = gradeSubmission({ submission, assignment, catalogByTitle, questionKeysById });
+  assert.equal(res.scoreTotal, 2);
+  assert.equal(res.scoreCorrect, 1);
+  assert.equal(res.perQuestion[0].correct, false);
+  assert.equal(res.perQuestion[0].flag, "question");
+  assert.equal(res.perQuestion[1].skipReason, "not-in-subset");
+  assert.equal(res.perQuestion[1].flag, "star"); // flag preserved on skip
+  assert.equal(res.perQuestion[2].correct, true);
+});
+
 test("gradeSubmission: flag preserved on missing-key skip path", () => {
   const { assignment, catalogByTitle } = makeFixture();
   // Empty questionKeysById — every question hits the missing-key path.

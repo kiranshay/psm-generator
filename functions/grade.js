@@ -174,6 +174,15 @@ function gradeSubmission({ submission, assignment, catalogByTitle, questionKeysB
   let scoreTotal = 0;
   const perQuestion = [];
 
+  // Session 18A: helper for even/odd subset filtering. Mirrors the
+  // client-side `isInSubset` in app.jsx — keep these two in sync.
+  function isInSubset(qi, subset) {
+    const s = String(subset || "").toUpperCase();
+    if (s === "EVEN") return qi % 2 === 1;
+    if (s === "ODD") return qi % 2 === 0;
+    return true;
+  }
+
   for (const r of responses) {
     const wId = r.worksheetId;
     const qi = Number(r.questionIndex);
@@ -182,6 +191,16 @@ function gradeSubmission({ submission, assignment, catalogByTitle, questionKeysB
     const w = worksheetById.get(wId);
     if (!w) {
       perQuestion.push({ worksheetId: wId, questionIndex: qi, questionId: null, correct: null, skipReason: "worksheet-not-in-assignment" });
+      continue;
+    }
+    // Session 18A: skip questions that are not in the assigned even/odd
+    // subset. They never appear on the student's answer column (the
+    // client masks them as "not assigned"), so if a response slipped
+    // through (e.g. legacy client write) we should not count it either
+    // way — flag it as not-in-subset so it shows up in the audit trail
+    // but never contributes to scoreCorrect/scoreTotal.
+    if (!isInSubset(qi, w.evenOdd)) {
+      perQuestion.push({ worksheetId: wId, questionIndex: qi, questionId: null, correct: null, skipReason: "not-in-subset", flag: r.flag || null });
       continue;
     }
     const row = catalogByTitle.get(w.title);

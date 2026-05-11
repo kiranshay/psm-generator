@@ -338,6 +338,46 @@ test('makeDraftPayload: bad flag values get coerced to null', () => {
   assert.equal(p.responses[2].flag, null);
 });
 
+// ── Session 18A: even/odd subset helper ──────────────────────────────────
+
+// Kept in sync with isInSubset in app.jsx.
+function isInSubset(i, subset){
+  const s = String(subset || "").toUpperCase();
+  if(s === "EVEN") return i % 2 === 1;
+  if(s === "ODD") return i % 2 === 0;
+  return true;
+}
+
+test('isInSubset: ODD includes display 1,3,5 (indices 0,2,4)', () => {
+  assert.equal(isInSubset(0, "ODD"), true);
+  assert.equal(isInSubset(1, "ODD"), false);
+  assert.equal(isInSubset(2, "ODD"), true);
+  assert.equal(isInSubset(3, "ODD"), false);
+  assert.equal(isInSubset(4, "ODD"), true);
+});
+
+test('isInSubset: EVEN includes display 2,4,6 (indices 1,3,5)', () => {
+  assert.equal(isInSubset(0, "EVEN"), false);
+  assert.equal(isInSubset(1, "EVEN"), true);
+  assert.equal(isInSubset(2, "EVEN"), false);
+  assert.equal(isInSubset(3, "EVEN"), true);
+  assert.equal(isInSubset(4, "EVEN"), false);
+});
+
+test('isInSubset: null/empty/undefined/"all" → every question included', () => {
+  assert.equal(isInSubset(0, null), true);
+  assert.equal(isInSubset(5, undefined), true);
+  assert.equal(isInSubset(7, ""), true);
+  assert.equal(isInSubset(3, "all"), true);
+  assert.equal(isInSubset(2, "anything-else"), true);
+});
+
+test('isInSubset: case-insensitive', () => {
+  assert.equal(isInSubset(0, "odd"), true);
+  assert.equal(isInSubset(1, "Even"), true);
+  assert.equal(isInSubset(2, "ODD"), true);
+});
+
 test('makeDraftPayload: flag preserved on empty answer', () => {
   // The student can mark "?" without ever typing — the flag is
   // independent of the answer string. Common when they realize
