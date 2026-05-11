@@ -75,9 +75,14 @@ jobs:
       # ── Deploy ─────────────────────────────────────────────────────────
       # firebase-tools picks up the GOOGLE_APPLICATION_CREDENTIALS env var
       # set by the auth action above. No --token needed.
+      #
+      # Session 18A: dropped `,storage` from the deploy targets. Storage
+      # rules change ~once a year; require Kiran or Aidan to run
+      # `firebase deploy --only storage` manually when storage.rules
+      # changes. Avoids needing storage.admin on the CI service account.
       - name: Deploy to Firebase Hosting
         run: |
           npx --yes firebase-tools@13 deploy \
-            --only hosting,storage \
+            --only hosting \
             --project psm-generator \
             --non-interactive
