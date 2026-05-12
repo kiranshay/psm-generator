@@ -786,15 +786,24 @@ function parseWiseCsv(text){
     const name = get(r, idxName);
     if(!name) continue;
     const phone = get(r, idxPhone1) || (idxPhone2!==idxPhone1 ? get(r, idxPhone2) : "");
+    const subject = get(r, idxSubject);
+    const level = get(r, idxLevel);
+    // Session 18C: Wise import auto-filter — only SAT-tagged rows are
+    // brought in by default. Match is "SAT" appearing in either the
+    // Specific Subject or the Level of Tutoring column, case-insensitive.
+    // Non-SAT rows still appear in the preview so the tutor can opt in
+    // if they want, but are unchecked by default.
+    const isSat = /\bSAT\b/i.test(subject) || /\bSAT\b/i.test(level);
     out.push({
       name,
+      isSat,
       meta: {
         email: get(r, idxEmail),
         phone,
         joinedOn: get(r, idxJoined),
         gradeLevel: get(r, idxGrade),
-        levelOfTutoring: get(r, idxLevel),
-        subjectOfTutoring: get(r, idxSubject),
+        levelOfTutoring: level,
+        subjectOfTutoring: subject,
         goals: get(r, idxGoals),
         source: "wise",
         importedAt: Date.now(),
@@ -802,6 +811,215 @@ function parseWiseCsv(text){
     });
   }
   return out;
+}
+
+/* ============ CONSULTATION STUDENT (Session 18C) ============ */
+//
+// Synthetic demo student visible to all tutors/admin. Excluded from
+// aggregates (heat map, dashboards) via the isConsultation flag — see
+// excludeConsultation() below.
+//
+// Seeded once into Firestore on first AppInner mount that finds the
+// /students collection missing the doc. Subsequent loads find the doc
+// and skip creation. Wise reconcile also skips this id explicitly.
+
+const CONSULTATION_STUDENT_ID = "__consultation__";
+
+function makeConsultationStudent() {
+  // Helper to add days/months to a date string YYYY-MM-DD.
+  const dayShift = (base, days) => {
+    const d = new Date(base + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+
+  // Synthetic timeline: Sep 2025 → Apr 2026, ~8 months of activity.
+  const START = "2025-09-01";
+
+  // WellEd Domain log entries — at least 3 per domain showing growth.
+  const welledLogs = [];
+  let logIdx = 0;
+  const pushLog = (subject, domain, difficulty, score, qs, daysAfterStart) => {
+    welledLogs.push({
+      id: `consult_log_${logIdx++}`,
+      date: dayShift(START, daysAfterStart),
+      subject,
+      domain,
+      difficulty,
+      score,
+      qs,
+    });
+  };
+
+  // R&W domains (out of 27)
+  pushLog("Reading & Writing", "Information & Ideas",        "easy",   15, 27,  14);
+  pushLog("Reading & Writing", "Information & Ideas",        "medium", 19, 27,  60);
+  pushLog("Reading & Writing", "Information & Ideas",        "hard",   22, 27, 140);
+  pushLog("Reading & Writing", "Craft & Structure",          "easy",   17, 27,  21);
+  pushLog("Reading & Writing", "Craft & Structure",          "medium", 20, 27,  75);
+  pushLog("Reading & Writing", "Craft & Structure",          "hard",   23, 27, 155);
+  pushLog("Reading & Writing", "Expression of Ideas",        "easy",   16, 27,  28);
+  pushLog("Reading & Writing", "Expression of Ideas",        "medium", 18, 27,  90);
+  pushLog("Reading & Writing", "Expression of Ideas",        "hard",   21, 27, 170);
+  pushLog("Reading & Writing", "Standard English Conventions","easy",  19, 27,  35);
+  pushLog("Reading & Writing", "Standard English Conventions","medium",22, 27, 105);
+  pushLog("Reading & Writing", "Standard English Conventions","hard",  25, 27, 185);
+  // Math domains (out of 22)
+  pushLog("Math", "Algebra",                         "easy",   14, 22,  18);
+  pushLog("Math", "Algebra",                         "medium", 17, 22,  72);
+  pushLog("Math", "Algebra",                         "hard",   19, 22, 150);
+  pushLog("Math", "Advanced Math",                   "easy",   13, 22,  24);
+  pushLog("Math", "Advanced Math",                   "medium", 16, 22,  84);
+  pushLog("Math", "Advanced Math",                   "hard",   18, 22, 162);
+  pushLog("Math", "Problem-Solving & Data Analysis", "easy",   15, 22,  31);
+  pushLog("Math", "Problem-Solving & Data Analysis", "hard",   18, 22, 110);
+  pushLog("Math", "Problem-Solving & Data Analysis", "hard",   20, 22, 178);
+  pushLog("Math", "Geometry & Trigonometry",         "easy",   13, 22,  38);
+  pushLog("Math", "Geometry & Trigonometry",         "hard",   16, 22, 118);
+  pushLog("Math", "Geometry & Trigonometry",         "hard",   19, 22, 192);
+
+  // Practice exam scores — diagnostic + two follow-ups showing growth.
+  const scores = [
+    {
+      id: "consult_score_1",
+      date: dayShift(START, 7),
+      testType: "BlueBook Diagnostic — Practice Test 1",
+      score: 1050,
+      maxScore: 1600,
+      rwScore: 540,
+      mathScore: 510,
+      isDiagnostic: true,
+      notes: "Baseline practice exam.",
+    },
+    {
+      id: "consult_score_2",
+      date: dayShift(START, 100),
+      testType: "WellEd Full — Practice Test 5",
+      score: 1140,
+      maxScore: 1600,
+      rwScore: 580,
+      mathScore: 560,
+      notes: "Mid-program checkpoint, ~90 points up.",
+    },
+    {
+      id: "consult_score_3",
+      date: dayShift(START, 200),
+      testType: "BlueBook Full — Practice Test 3",
+      score: 1260,
+      maxScore: 1600,
+      rwScore: 640,
+      mathScore: 620,
+      notes: "Late-program practice; 210 pts above baseline.",
+    },
+  ];
+
+  // Diagnostic baseline upload — single ZipGrade-style result with
+  // per-tag breakdown so the diagnostic profile view has something to
+  // render. Numbers chosen to roughly match the 1050 baseline above.
+  const diagnostics = [
+    {
+      id: "consult_diag_1",
+      date: dayShift(START, 7),
+      fileName: "Consultation_Diagnostic_2025-09-08.pdf",
+      examType: "SAT",
+      sectionScores: {
+        "Reading & Writing": { scaled: 540, raw: 32, total: 54 },
+        "Math":              { scaled: 510, raw: 24, total: 44 },
+      },
+      totalScaled: 1050,
+      tags: [
+        { tag: "Information & Ideas",         correct: 7,  total: 13 },
+        { tag: "Craft & Structure",           correct: 8,  total: 13 },
+        { tag: "Expression of Ideas",         correct: 8,  total: 14 },
+        { tag: "Standard English Conventions",correct: 9,  total: 14 },
+        { tag: "Algebra",                     correct: 7,  total: 13 },
+        { tag: "Advanced Math",               correct: 5,  total: 13 },
+        { tag: "Problem-Solving & Data Analysis", correct: 7, total: 9 },
+        { tag: "Geometry & Trigonometry",     correct: 5,  total: 9 },
+      ],
+    },
+  ];
+
+  // Five PSMs spread across the timeline with varied worksheets.
+  const psm = (idSuffix, daysAfterStart, worksheets, opts = {}) => ({
+    id: `consult_asg_${idSuffix}`,
+    date: dayShift(START, daysAfterStart),
+    examType: "SAT",
+    worksheets,
+    welledDomain: opts.welledDomain || [],
+    vocab: opts.vocab || [],
+    practiceExams: opts.practiceExams || [],
+    timeDrill: !!opts.timeDrill,
+    oneNote: !!opts.oneNote,
+    notes: opts.notes || "",
+  });
+
+  // Reference worksheets by ALL_WS id format (`subject|domain|subdomain|difficulty|title`)
+  // matches what the Generator produces. We use real titles from the catalog.
+  const ws = (subject, domain, subdomain, difficulty, qs, title) => ({
+    id: `${subject}|${domain}|${subdomain}|${difficulty}|${title}`,
+    title,
+    subject,
+    domain,
+    subdomain,
+    difficulty,
+    qs,
+    evenOdd: null,
+    timeLimit: null,
+  });
+
+  const assignments = [
+    psm("1", 7, [
+      ws("Reading & Writing", "Information & Ideas", "Central Ideas & Details", "easy", 7, "CID-Easy (7Qs)"),
+      ws("Reading & Writing", "Craft & Structure", "Words in Context", "easy", 6, "Words in Context - Easy (6Qs)"),
+      ws("Math", "Algebra", "Linear Equations in One Variable", "easy", 5, "LinEQ1Var - Easy (5Qs)"),
+    ], { notes: "Diagnostic-week opener." }),
+    psm("2", 38, [
+      ws("Reading & Writing", "Information & Ideas", "Inferences", "medium", 5, "Inferences-Med (5Qs)"),
+      ws("Math", "Advanced Math", "Equivalent Expressions", "medium", 6, "EquivExp-Med (6Qs)"),
+      ws("Math", "Problem-Solving & Data Analysis", "Probability", "easy", 4, "Probability - Easy (4Qs)"),
+    ]),
+    psm("3", 88, [
+      ws("Reading & Writing", "Craft & Structure", "Text Structure & Purpose", "hard", 5, "TextStructPurp - Hard (5Qs)"),
+      ws("Math", "Algebra", "Systems of Linear Equations", "hard", 6, "Systems - Hard (6Qs)"),
+      ws("Math", "Geometry & Trigonometry", "Circles", "medium", 3, "Circles - Medium (3Qs)"),
+    ], { welledDomain: [{ id: "WED|Math|Algebra|hard", subject: "Math", domain: "Algebra", difficulty: "hard", qs: 22, label: "Algebra - Hard (22Qs)", score: 17 }] }),
+    psm("4", 140, [
+      ws("Reading & Writing", "Expression of Ideas", "Rhetorical Synthesis", "hard", 4, "RhetSynth - Hard (4Qs)"),
+      ws("Math", "Advanced Math", "Nonlinear Functions", "hard", 5, "NonlinFunc - Hard (5Qs)"),
+      ws("Math", "Geometry & Trigonometry", "Circles", "hard", 10, "Circles - Hard (10Qs)"),
+    ], { timeDrill: true }),
+    psm("5", 195, [
+      ws("Reading & Writing", "Standard English Conventions", "Boundaries", "hard", 5, "Boundaries - Hard (5Qs)"),
+      ws("Reading & Writing", "Expression of Ideas", "Comprehensive Expression of Ideas", "comprehensive", 10, "CompExpIdeas-Comp (10Qs)"),
+      ws("Math", "Problem-Solving & Data Analysis", "Comprehensive PSDA", "comprehensive", 12, "CompPSDA - Comp (12Qs)"),
+    ], { practiceExams: [{ platform: "BlueBook", number: 3, type: "full", rwScore: 640, mathScore: 620 }] }),
+  ];
+
+  return {
+    name: "Consultation Student",
+    isConsultation: true,
+    dateAdded: START,
+    meta: {
+      grade: "11",
+      source: "synthetic",
+      isConsultation: true,
+      joinedOn: START,
+      levelOfTutoring: "Demo",
+      subjectOfTutoring: "SAT",
+      goals: "Synthetic profile to demonstrate tracking views. Excluded from real-student aggregates.",
+    },
+    assignments,
+    scores,
+    welledLogs,
+    diagnostics,
+  };
+}
+
+// Helper used in aggregate computations (heat map, dashboards) to exclude
+// the consultation profile from real-student rollups.
+function excludeConsultation(list){
+  return (list || []).filter(s => !(s && (s.isConsultation === true || s.id === CONSULTATION_STUDENT_ID)));
 }
 
 /* ============ WORKSHEET CATALOG ============ */
@@ -2872,6 +3090,35 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
     return ()=>{ unsubStudents(); unsubBlob(); };
   }, []);
 
+  // ── Session 18C: Consultation Student seed ──────────────────────────────
+  // Once the students listener has hydrated, check if the consultation
+  // demo profile exists. If not, seed it. Idempotent: runs once per
+  // session, no-ops on subsequent loads. Any authorized tutor/admin can
+  // trigger creation — there's nothing tutor-specific about the data.
+  const _consultationSeeded = useRef(false);
+  useEffect(()=>{
+    if(_consultationSeeded.current) return;
+    if(cloudStatus !== "synced") return; // wait for first listener tick
+    if(!students || students.length === 0) {
+      // Empty roster — listener fired but found no docs. Still seed so
+      // a brand-new project gets the demo profile.
+    }
+    if(students.find(st => st && st.id === CONSULTATION_STUDENT_ID)) {
+      _consultationSeeded.current = true;
+      return;
+    }
+    const col = studentsCollection();
+    if(!col) return;
+    _consultationSeeded.current = true; // mark before async to dedupe
+    const data = makeConsultationStudent();
+    col.doc(CONSULTATION_STUDENT_ID).set({...data, id: CONSULTATION_STUDENT_ID})
+      .then(()=> console.log("[consultation] seeded synthetic demo profile"))
+      .catch((e)=> {
+        _consultationSeeded.current = false; // allow retry next mount
+        console.warn("[consultation] seed failed:", e);
+      });
+  }, [students, cloudStatus]);
+
   // ── Write students: per-doc batch to /students, dual-write to blob ──
   useEffect(()=>{
     if(_fromFirestore.current) return;
@@ -2958,10 +3205,13 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
   })),[students]);
   const curStudent = visibleStudents.find(st=>st.id===selSt);
 
-  // Heat Map domains (from assignments)
+  // Heat Map domains (from assignments). Session 18C: aggregate
+  // computations exclude the Consultation Student (synthetic) so demo
+  // data never inflates real-roster stats.
   const heatDoms = useMemo(()=>[...new Set(ALL_WS.map(ws=>ws.domain))],[]);
   const getHV = (st,d)=>(st.assignments||[]).reduce((n,a)=>n+(a.worksheets||[]).filter(w=>w.domain===d).length,0);
-  const heatMax = useMemo(()=>visibleStudents.reduce((mx,st)=>heatDoms.reduce((m,d)=>Math.max(m,getHV(st,d)),mx),1),[visibleStudents,heatDoms]);
+  const aggregateStudents = useMemo(()=>excludeConsultation(visibleStudents),[visibleStudents]);
+  const heatMax = useMemo(()=>aggregateStudents.reduce((mx,st)=>heatDoms.reduce((m,d)=>Math.max(m,getHV(st,d)),mx),1),[aggregateStudents,heatDoms]);
   const heatC = (v)=>{if(!v)return"#f1f5f9";const i=v/heatMax;return i<.25?"#bfdbfe":i<.5?"#60a5fa":i<.75?"#3b82f6":"#1d4ed8";};
 
   /* ============ GENERATE OUTPUT ============ */
@@ -3573,10 +3823,13 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
         const parsed = parseWiseCsv(String(r.result||""));
         if(!parsed.length){ alert("No students found in this file."); return; }
         const existingNames = new Set(students.filter(s=>!s.deleted).map(s=>s.name.trim().toLowerCase()));
+        // Session 18C: default-select only SAT-tagged + non-duplicate rows.
+        // Non-SAT rows still appear in the preview so the tutor can opt in
+        // (e.g. ACT prep), but the auto-allowlist intent is SAT-only.
         const rows = parsed.map(p=>({
           ...p,
           duplicate: existingNames.has(p.name.trim().toLowerCase()),
-          selected: !existingNames.has(p.name.trim().toLowerCase()),
+          selected: !existingNames.has(p.name.trim().toLowerCase()) && !!p.isSat,
         }));
         setWiseImport({fileName: f.name, rows});
       }catch(err){
@@ -3900,9 +4153,11 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
                 </div>
                 <div style={{marginTop:14,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
                   <button onClick={()=>setWiseAll(true,true)} style={{...mkBtn("transparent","var(--brand)"),border:"1px solid rgba(0,74,121,.35)",padding:"5px 12px",fontSize:11}}>Select all new</button>
+                  {/* Session 18C: SAT-only quick selector */}
+                  <button onClick={()=>setWiseImport(w=>w?{...w, rows: w.rows.map(r=>({...r, selected: !!r.isSat && !r.duplicate}))}:w)} style={{...mkBtn("transparent","#4C7A4C"),border:"1px solid rgba(76,122,76,.4)",padding:"5px 12px",fontSize:11}}>Select SAT only</button>
                   <button onClick={()=>setWiseAll(true,false)} style={{...mkBtn("transparent","var(--ink-soft)"),border:"1px solid var(--rule)",padding:"5px 12px",fontSize:11}}>Select all</button>
                   <button onClick={()=>setWiseAll(false,false)} style={{...mkBtn("transparent","var(--ink-soft)"),border:"1px solid var(--rule)",padding:"5px 12px",fontSize:11}}>Clear</button>
-                  <div style={{marginLeft:"auto",fontFamily:"var(--font-mono)",fontSize:10,color:"var(--ink-mute)",letterSpacing:"0.04em",textTransform:"uppercase"}}>{selCount} selected</div>
+                  <div style={{marginLeft:"auto",fontFamily:"var(--font-mono)",fontSize:10,color:"var(--ink-mute)",letterSpacing:"0.04em",textTransform:"uppercase"}}>{selCount} selected · {wiseImport.rows.filter(r=>r.isSat).length} SAT</div>
                 </div>
               </div>
               <div style={{flex:1,overflowY:"auto"}}>
@@ -3925,7 +4180,7 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
                         <td style={{padding:"10px 14px",fontFamily:"var(--font-mono)",fontSize:11,color:"var(--ink-soft)"}}>{r.meta.phone||"—"}</td>
                         <td style={{padding:"10px 14px",color:"var(--ink-soft)"}}>{r.meta.gradeLevel||"—"}</td>
                         <td style={{padding:"10px 14px",color:"var(--ink-soft)"}}>{r.meta.levelOfTutoring||"—"}</td>
-                        <td style={{padding:"10px 14px",color:"var(--ink-soft)"}}>{r.meta.subjectOfTutoring||"—"}</td>
+                        <td style={{padding:"10px 14px",color:"var(--ink-soft)"}}>{r.meta.subjectOfTutoring||"—"}{r.isSat&&<span style={{marginLeft:6,padding:"1px 6px",borderRadius:2,fontSize:9,fontWeight:700,letterSpacing:.4,background:"#E4F0E2",color:"#4C7A4C",fontFamily:"'IBM Plex Mono',monospace"}}>SAT</span>}</td>
                         <td style={{padding:"10px 14px",whiteSpace:"nowrap"}}>
                           {r.duplicate ? (
                             <span style={{display:"inline-block",padding:"2px 9px",borderRadius:999,border:"1px solid rgba(154,91,31,.35)",color:"var(--accent)",fontFamily:"var(--font-mono)",fontSize:9,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase"}}>Already in PSM</span>
@@ -5926,7 +6181,9 @@ function InlinePdfViewer({url}){
         for(let pageNum=1; pageNum<=pdf.numPages; pageNum++){
           if(cancelled) return;
           const page = await pdf.getPage(pageNum);
-          const viewport = page.getViewport({scale: 1.35});
+          // Session 18B: bumped scale 1.35 → 1.65 so the worksheet text
+          // is readable when the PDF viewer is in a narrow column.
+          const viewport = page.getViewport({scale: 1.65});
           const canvas = document.createElement("canvas");
           canvas.width = viewport.width;
           canvas.height = viewport.height;
@@ -5952,7 +6209,13 @@ function InlinePdfViewer({url}){
   return (
     <div style={{
       border:"1px solid rgba(15,26,46,.1)", borderRadius:8, padding:10,
-      background:"#F7F5EF", maxHeight:900, overflowY:"auto", boxSizing:"border-box",
+      background:"#F7F5EF",
+      // Session 18B: viewer pane now sticks to the top of its grid cell
+      // and gets up to 88vh of vertical room. Was maxHeight:900 with no
+      // sticky behavior — when a PSM had multiple worksheets the lower
+      // PDFs scrolled out of view while the user was still answering.
+      maxHeight:"88vh", overflowY:"auto", boxSizing:"border-box",
+      position:"sticky", top:14,
     }}>
       {status === "loading" && (
         <div style={{textAlign:"center", padding:"40px 0", fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:"#66708A", letterSpacing:1, textTransform:"uppercase"}}>
