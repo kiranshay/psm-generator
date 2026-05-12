@@ -1020,6 +1020,43 @@ const studentSubmissionsCollection = (id) => window.db
   ? window.db.collection("students").doc(id).collection("submissions")
   : null;
 
+// Session 18A — per-worksheet submissions (foundation; flag-gated below).
+//
+// New path: students/{sid}/assignments/{aid}/worksheetSubmissions/{worksheetId}
+// One doc per worksheet within a PSM. Doc id = worksheetId so reads/writes
+// are by-id (no query). Shape:
+//   { worksheetId, status: "draft"|"submitted"|"graded",
+//     responses: [{questionIndex, studentAnswer, flag}],
+//     scoreCorrect?, scoreTotal?, perQuestion?,
+//     createdAt, updatedAt, submittedAt?, gradedAt? }
+//
+// Legacy `students/{sid}/submissions/{subId}` stays the canonical write
+// target until PER_WORKSHEET_SUBMIT_ENABLED is flipped on. Read code
+// prefers per-worksheet docs when both exist (per-worksheet doc wins for
+// the worksheet it represents); legacy fills in the rest.
+//
+// This commit only adds the helpers + read hook. SubmissionEditor still
+// writes legacy. The new write path lands in a follow-up after smoke
+// testing on a non-production student.
+const studentAssignmentWorksheetSubmissionsCollection = (studentId, assignmentId) =>
+  (window.db && studentId && assignmentId)
+    ? window.db.collection("students").doc(studentId)
+        .collection("assignments").doc(assignmentId)
+        .collection("worksheetSubmissions")
+    : null;
+
+// Feature flag — read from window.localStorage so we can flip per-browser
+// without a redeploy during smoke testing. Set window.localStorage.setItem(
+// "psm_per_worksheet_submit", "1") in the dev console to enable.
+function perWorksheetSubmitEnabled() {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return false;
+    return window.localStorage.getItem("psm_per_worksheet_submit") === "1";
+  } catch {
+    return false;
+  }
+}
+
 // Notes are written out-of-band from the main students batch — they change
 // rarely (only on student creation today) and mixing them into every tutor
 // state change would fire wasted writes. Notes also must never appear in
@@ -1117,6 +1154,45 @@ function useWorksheetCatalog(){
     );
     return ()=>{ alive = false; };
   }, []);
+  return state;
+}
+
+// Session 18A: live snapshot of per-worksheet submission docs for one
+// (studentId, assignmentId) pair. Returns { status, byWorksheet } where
+// byWorksheet is keyed by worksheetId. Used by SubmissionEditor (future)
+// for the per-worksheet submit path and by TutorSubmissionsPanel /
+// PortalHistoryTab to render per-worksheet status pills.
+//
+// onSnapshot subscription — tutor + student may be looking at the same
+// PSM at the same time, and grading writes happen out-of-band from the
+// auto-grade trigger; the live channel keeps the UI consistent without
+// hand-rolled invalidation.
+function useWorksheetSubmissions(studentId, assignmentId){
+  const [state, setState] = useState({status:"loading", byWorksheet:{}});
+  useEffect(()=>{
+    if(!studentId || !assignmentId){
+      setState({status:"not-found", byWorksheet:{}});
+      return;
+    }
+    const col = studentAssignmentWorksheetSubmissionsCollection(studentId, assignmentId);
+    if(!col){
+      setState({status:"error", byWorksheet:{}});
+      return;
+    }
+    setState({status:"loading", byWorksheet:{}});
+    const unsub = col.onSnapshot(
+      (snap)=>{
+        const by = {};
+        snap.forEach(d => { by[d.id] = {id:d.id, ...d.data()}; });
+        setState({status:"ready", byWorksheet:by});
+      },
+      (err)=>{
+        console.warn("[portal] worksheetSubmissions snapshot error:", err);
+        setState({status:"error", byWorksheet:{}});
+      }
+    );
+    return ()=>unsub();
+  }, [studentId, assignmentId]);
   return state;
 }
 

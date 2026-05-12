@@ -264,6 +264,97 @@ function gradeSubmission({ submission, assignment, catalogByTitle, questionKeysB
   return { status: "graded", scoreCorrect, scoreTotal, perQuestion };
 }
 
+// ── Session 18A: per-worksheet grader (foundation) ────────────────────────
+//
+// Grades one worksheet's submission doc — the new shape under
+// students/{sid}/assignments/{aid}/worksheetSubmissions/{worksheetId}.
+// Same semantics as gradeSubmission but scoped to a single worksheet, so
+// catalogByTitle / questionKeysById are only consulted for one row.
+//
+// Inputs:
+//   worksheetSubmission — { worksheetId, responses[] } shape; responses[i]
+//                         is { questionIndex, studentAnswer, flag? }.
+//                         worksheetId on the doc is authoritative.
+//   worksheet           — the assignment.worksheets[n] entry. Carries
+//                         title + evenOdd for subset gating.
+//   catalogRow          — the worksheets_catalog.json row for this title.
+//   questionKeysById    — Map<id, {correctAnswer}>. Caller passes only
+//                         the keys for this worksheet's questionIds.
+//
+// Returns same shape as gradeSubmission but with perQuestion entries
+// missing the worksheetId field (it's implicit on the doc).
+//
+// Not wired into a Firestore trigger yet — that lands when the client
+// starts writing to worksheetSubmissions. This function is exported so
+// tests + the future trigger can use it.
+
+function gradeWorksheetSubmission({ worksheetSubmission, worksheet, catalogRow, questionKeysById }) {
+  const responses = Array.isArray(worksheetSubmission && worksheetSubmission.responses)
+    ? worksheetSubmission.responses
+    : [];
+  if (responses.length === 0) {
+    return { status: "skipped", reason: "no-responses" };
+  }
+  if (!worksheet) {
+    return { status: "skipped", reason: "no-worksheet-on-assignment" };
+  }
+  if (!catalogRow) {
+    return { status: "skipped", reason: "no-catalog-row" };
+  }
+  if (catalogRow.answerFormat === "unsupported" || catalogRow.answerFormat === "pending-extraction") {
+    return { status: "skipped", reason: "unsupported-worksheet" };
+  }
+  const qIds = Array.isArray(catalogRow.questionIds) ? catalogRow.questionIds : null;
+  if (!qIds || qIds.length === 0) {
+    return { status: "skipped", reason: "no-question-ids" };
+  }
+
+  function isInSubset(qi, subset) {
+    const s = String(subset || "").toUpperCase();
+    if (s === "EVEN") return qi % 2 === 1;
+    if (s === "ODD") return qi % 2 === 0;
+    return true;
+  }
+
+  let scoreCorrect = 0;
+  let scoreTotal = 0;
+  const perQuestion = [];
+
+  for (const r of responses) {
+    const qi = Number(r.questionIndex);
+    if (qi < 0 || qi >= qIds.length) {
+      perQuestion.push({ questionIndex: qi, questionId: null, correct: null, skipReason: "questionIndex-out-of-range", flag: r.flag || null });
+      continue;
+    }
+    if (!isInSubset(qi, worksheet.evenOdd)) {
+      perQuestion.push({ questionIndex: qi, questionId: null, correct: null, skipReason: "not-in-subset", flag: r.flag || null });
+      continue;
+    }
+    const qid = qIds[qi];
+    const key = questionKeysById.get(qid);
+    if (!key || key.correctAnswer === undefined) {
+      perQuestion.push({ questionIndex: qi, questionId: qid, correct: null, skipReason: "missing-key", flag: r.flag || null });
+      continue;
+    }
+    const flag = r.flag || null;
+    const isCorrect = flag === "question" ? false : gradeOne(r.studentAnswer, key.correctAnswer);
+    scoreTotal += 1;
+    if (isCorrect) scoreCorrect += 1;
+    perQuestion.push({
+      questionIndex: qi,
+      questionId: qid,
+      correct: isCorrect,
+      correctAnswer: key.correctAnswer,
+      flag,
+    });
+  }
+
+  if (scoreTotal === 0) {
+    return { status: "skipped", reason: "all-questions-unsupported-or-missing" };
+  }
+  return { status: "graded", scoreCorrect, scoreTotal, perQuestion };
+}
+
 // ── Exports (test + trigger surface) ──────────────────────────────────────
 
 module.exports = {
@@ -273,4 +364,5 @@ module.exports = {
   gradeFr,
   gradeOne,
   gradeSubmission,
+  gradeWorksheetSubmission,
 };

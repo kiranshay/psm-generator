@@ -11,6 +11,7 @@ const {
   gradeFr,
   gradeOne,
   gradeSubmission,
+  gradeWorksheetSubmission,
 } = require("./grade");
 
 // ── normalize() table ────────────────────────────────────────────────────
@@ -513,4 +514,106 @@ test("gradeSubmission: flag preserved on missing-key skip path", () => {
   // Skipped status doesn't return perQuestion, but the legacy "any
   // graded question" path would; the test exists to flag if that
   // changes. Behavior for now: perQuestion is not returned on skip.
+});
+
+// ── Session 18A: per-worksheet grader (foundation) ────────────────────────
+
+function makeWsFixture() {
+  const worksheet = { id: "w1", title: "MC Worksheet" };
+  const catalogRow = {
+    title: "MC Worksheet",
+    answerFormat: "multiple-choice",
+    questionIds: ["q1", "q2", "q3"],
+  };
+  const questionKeysById = new Map([
+    ["q1", { correctAnswer: "A" }],
+    ["q2", { correctAnswer: "B" }],
+    ["q3", { correctAnswer: "C" }],
+  ]);
+  return { worksheet, catalogRow, questionKeysById };
+}
+
+test("gradeWorksheetSubmission: all correct → 3/3", () => {
+  const { worksheet, catalogRow, questionKeysById } = makeWsFixture();
+  const worksheetSubmission = {
+    worksheetId: "w1",
+    responses: [
+      { questionIndex: 0, studentAnswer: "A" },
+      { questionIndex: 1, studentAnswer: "B" },
+      { questionIndex: 2, studentAnswer: "C" },
+    ],
+  };
+  const res = gradeWorksheetSubmission({ worksheetSubmission, worksheet, catalogRow, questionKeysById });
+  assert.equal(res.status, "graded");
+  assert.equal(res.scoreCorrect, 3);
+  assert.equal(res.scoreTotal, 3);
+  // perQuestion has NO worksheetId field (implicit on the doc)
+  assert.equal(res.perQuestion[0].worksheetId, undefined);
+});
+
+test("gradeWorksheetSubmission: flag='question' counts as wrong", () => {
+  const { worksheet, catalogRow, questionKeysById } = makeWsFixture();
+  const worksheetSubmission = {
+    worksheetId: "w1",
+    responses: [
+      { questionIndex: 0, studentAnswer: "A", flag: "question" },
+      { questionIndex: 1, studentAnswer: "B" },
+      { questionIndex: 2, studentAnswer: "C" },
+    ],
+  };
+  const res = gradeWorksheetSubmission({ worksheetSubmission, worksheet, catalogRow, questionKeysById });
+  assert.equal(res.scoreCorrect, 2);
+  assert.equal(res.scoreTotal, 3);
+  assert.equal(res.perQuestion[0].correct, false);
+  assert.equal(res.perQuestion[0].flag, "question");
+});
+
+test("gradeWorksheetSubmission: subset=ODD only grades indices 0,2", () => {
+  const { catalogRow, questionKeysById } = makeWsFixture();
+  const worksheet = { id: "w1", title: "MC Worksheet", evenOdd: "ODD" };
+  const worksheetSubmission = {
+    worksheetId: "w1",
+    responses: [
+      { questionIndex: 0, studentAnswer: "A" },
+      { questionIndex: 1, studentAnswer: "B" },
+      { questionIndex: 2, studentAnswer: "X" },
+    ],
+  };
+  const res = gradeWorksheetSubmission({ worksheetSubmission, worksheet, catalogRow, questionKeysById });
+  assert.equal(res.scoreCorrect, 1);
+  assert.equal(res.scoreTotal, 2);
+  assert.equal(res.perQuestion[1].skipReason, "not-in-subset");
+});
+
+test("gradeWorksheetSubmission: pending-extraction catalog row skipped", () => {
+  const worksheet = { id: "w1", title: "Old Writing - PT #1 (44Qs)" };
+  const catalogRow = {
+    title: "Old Writing - PT #1 (44Qs)",
+    answerFormat: "pending-extraction",
+    questionIds: [],
+  };
+  const worksheetSubmission = {
+    worksheetId: "w1",
+    responses: [{ questionIndex: 0, studentAnswer: "A" }],
+  };
+  const res = gradeWorksheetSubmission({
+    worksheetSubmission,
+    worksheet,
+    catalogRow,
+    questionKeysById: new Map(),
+  });
+  assert.equal(res.status, "skipped");
+  assert.equal(res.reason, "unsupported-worksheet");
+});
+
+test("gradeWorksheetSubmission: empty responses → skipped", () => {
+  const { worksheet, catalogRow, questionKeysById } = makeWsFixture();
+  const res = gradeWorksheetSubmission({
+    worksheetSubmission: { worksheetId: "w1", responses: [] },
+    worksheet,
+    catalogRow,
+    questionKeysById,
+  });
+  assert.equal(res.status, "skipped");
+  assert.equal(res.reason, "no-responses");
 });
