@@ -1570,8 +1570,37 @@ function buildScoreTrendsSeries(student){
 // Top-level role-aware router. Tutors and admins see AppInner. Students and
 // parents see StudentPortal scoped to their linked student(s). This is the
 // only place the role check gates which app renders.
+// Session 18B: read impersonation target from URL. Tutors/admins can
+// open ?impersonate=<studentId> to view the portal as that student.
+// Returns null when the param is missing, the URL APIs aren't available,
+// or the value is empty.
+function getImpersonateStudentId(){
+  try {
+    if(typeof window === "undefined" || !window.location) return null;
+    const params = new URLSearchParams(window.location.search || "");
+    const v = (params.get("impersonate") || "").trim();
+    return v || null;
+  } catch { return null; }
+}
+
 function RoleRouter({authUser, onSignOut, currentUserEntry}){
   const role = currentUserEntry?.role || null;
+
+  // Session 18B: admin/tutor impersonation. Renders the student portal
+  // for the target studentId, with a banner indicating read-only view.
+  // Security: only admin/tutor roles can impersonate. The portal still
+  // reads data via the tutor's own auth session — Firestore rules permit
+  // tutor reads of any student doc, so no rule changes required.
+  const impersonateId = getImpersonateStudentId();
+  if(impersonateId && (role === "admin" || role === "tutor")){
+    return <StudentPortal
+      studentId={impersonateId}
+      onSignOut={onSignOut}
+      currentUserEntry={currentUserEntry}
+      impersonating={true}
+    />;
+  }
+
   if(role === "parent"){
     const ids = Array.isArray(currentUserEntry?.studentIds) ? currentUserEntry.studentIds : [];
     if(ids.length > 1){
@@ -4478,7 +4507,11 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
     <div>
       {/* HEADER — editorial masthead for a student profile */}
       <div style={{marginBottom:20,paddingBottom:18,borderBottom:"1px solid rgba(15,26,46,.1)"}}>
-        <button onClick={()=>setProfile(null)} style={{...mkBtn("transparent","#66708A"),border:"none",padding:"0",fontSize:11,marginBottom:14,letterSpacing:.4,textTransform:"uppercase",cursor:"pointer"}}>← Back to Roster</button>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,gap:12,flexWrap:"wrap"}}>
+          <button onClick={()=>setProfile(null)} style={{...mkBtn("transparent","#66708A"),border:"none",padding:"0",fontSize:11,letterSpacing:.4,textTransform:"uppercase",cursor:"pointer"}}>← Back to Roster</button>
+          {/* Session 18B: View as student → opens portal in tutor impersonation mode (read-only) */}
+          <a href={`?impersonate=${encodeURIComponent(p.id)}`} target="_blank" rel="noopener noreferrer" title="Open this student's portal in a new tab (read-only)" style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,letterSpacing:.6,textTransform:"uppercase",color:"#0F1A2E",textDecoration:"none",border:"1px solid rgba(15,26,46,.25)",padding:"6px 12px",borderRadius:3,fontWeight:600,background:"#FAF7F2"}}>View as student ↗</a>
+        </div>
         <div style={{display:"flex",alignItems:"flex-start",gap:20,flexWrap:"wrap"}}>
           <div style={{width:64,height:64,borderRadius:4,background:B2,display:"flex",alignItems:"center",justifyContent:"center",color:"#FAF7F2",fontFamily:"'Fraunces',Georgia,serif",fontVariationSettings:'"opsz" 144',fontSize:32,fontWeight:600,flexShrink:0,boxShadow:"0 6px 18px -8px rgba(0,50,88,.5)"}}>{p.name.charAt(0).toUpperCase()}</div>
           <div style={{flex:"1 1 320px",minWidth:0}}>
@@ -4887,7 +4920,7 @@ function StudentProfile({p,setProfile,ptab,setPtab,paChk,setPaChk,paSubj,setPaSu
 /* ============ STUDENT PORTAL (Phase 2 Session 3) ============ */
 // Read-only view for student/parent roles. Subscribes to a single
 // /students/{id} doc. Never reads the full collection or _private/info.
-function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot}){
+function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot, impersonating}){
   const [tab, setTab] = useState("tracking");
   const {status, student} = usePortalStudent(studentId);
   // Session 15: listen to the student's own submissions so PortalHistoryTab
@@ -4925,7 +4958,7 @@ function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot}){
 
   if(status === "error"){
     return (
-      <PortalShell studentName="" onSignOut={onSignOut} currentUserEntry={currentUserEntry} switcherSlot={switcherSlot}>
+      <PortalShell studentName="" onSignOut={onSignOut} currentUserEntry={currentUserEntry} switcherSlot={switcherSlot} impersonating={impersonating}>
         <div style={{...CARD, padding:"60px 40px", textAlign:"center", margin:"40px auto", maxWidth:520}}>
           <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:22,color:"#8C2E2E",letterSpacing:-.2}}>
             Couldn't load your student record. Try reloading.
@@ -4937,7 +4970,7 @@ function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot}){
 
   if(status === "not-found" || !student){
     return (
-      <PortalShell studentName="" onSignOut={onSignOut} currentUserEntry={currentUserEntry} switcherSlot={switcherSlot}>
+      <PortalShell studentName="" onSignOut={onSignOut} currentUserEntry={currentUserEntry} switcherSlot={switcherSlot} impersonating={impersonating}>
         <div style={{...CARD, padding:"60px 40px", textAlign:"center", margin:"40px auto", maxWidth:520}}>
           <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:22,color:"#66708A",letterSpacing:-.2,marginBottom:10}}>
             No student record linked to this account.
@@ -4951,7 +4984,7 @@ function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot}){
   }
 
   return (
-    <PortalShell studentName={student.name} studentGrade={student.grade} onSignOut={onSignOut} currentUserEntry={currentUserEntry} switcherSlot={switcherSlot}>
+    <PortalShell studentName={student.name} studentGrade={student.grade} onSignOut={onSignOut} currentUserEntry={currentUserEntry} switcherSlot={switcherSlot} impersonating={impersonating}>
       <div style={{display:"flex",gap:28,marginBottom:24,borderBottom:"1px solid rgba(15,26,46,.12)",flexWrap:"wrap"}}>
         {[
           {id:"tracking", label:"Score Tracking"},
@@ -4981,9 +5014,19 @@ function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot}){
   );
 }
 
-function PortalShell({studentName, studentGrade, onSignOut, switcherSlot, children}){
+function PortalShell({studentName, studentGrade, onSignOut, switcherSlot, children, impersonating}){
   return (
     <div data-portal="student" style={{minHeight:"100vh",background:"var(--paper)",padding:"28px 32px 80px"}}>
+      {/* Session 18B: tutor/admin impersonation banner (read-only marker) */}
+      {impersonating && (
+        <div style={{position:"sticky",top:0,zIndex:9999,marginBottom:18,padding:"10px 16px",background:"#FFF1DE",border:"1px solid rgba(154,91,31,.45)",borderRadius:4,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8,fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#6E3F12",letterSpacing:.3}}>
+          <div>
+            <span style={{fontWeight:700,letterSpacing:.6,textTransform:"uppercase",marginRight:8}}>Tutor View</span>
+            Reviewing <strong>{studentName || "this student"}</strong>'s portal. Writes are blocked.
+          </div>
+          <a href={typeof window!=="undefined"?window.location.pathname:"/"} style={{color:"#6E3F12",fontWeight:600,textDecoration:"underline",cursor:"pointer"}}>Exit student view →</a>
+        </div>
+      )}
       <div style={{maxWidth:960,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:32,flexWrap:"wrap",gap:12}}>
           <div>
@@ -5336,7 +5379,10 @@ function PortalHistoryTab({student, studentId, currentUserEntry, deepLinkAssignm
       <SubmissionEditor
         studentId={studentId}
         assignment={asg}
-        readOnly={!canEdit}
+        // Session 18B: impersonation forces read-only regardless of
+        // assignment state, so tutors viewing as a student can't
+        // accidentally answer questions or hit submit.
+        readOnly={!canEdit || !!impersonating}
         onClose={()=>setOpenAssignmentId(null)}
       />
     );
