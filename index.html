@@ -1196,7 +1196,17 @@ async function parseWelledReport(file){
     const tc = await page.getTextContent();
     fullText += tc.items.map(it=>it.str).join(" ") + "\n";
   }
-  const result = {fileName:file.name, raw:fullText, testName:null, testNumber:null, testedOn:null, totalScore:null, rwScore:null, mathScore:null, rawScores:{}, subskills:[], type:"full"};
+  const result = {
+    fileName:file.name, raw:fullText,
+    testName:null, testNumber:null, testedOn:null,
+    totalScore:null, rwScore:null, mathScore:null,
+    rawScores:{},
+    // domains[] (8 entries for full, 4 for section-only) populated below.
+    // subskills stays empty — WellEd reports don't have catalog-aligned
+    // subskill granularity. They contribute to DOMAIN time-points only.
+    subskills:[], domains:[],
+    type:"full",
+  };
 
   // Test name and number
   const tnMatch = fullText.match(/Test name[:\s]*(.+?)(?:\n|Tested)/i);
@@ -1205,9 +1215,22 @@ async function parseWelledReport(file){
     const numMatch = result.testName.match(/Practice Test\s*#?\s*(\d+)/i);
     if(numMatch) result.testNumber = parseInt(numMatch[1]);
   }
-  // Tested on date
-  const tdMatch = fullText.match(/Tested on[:\s]*([\d\/\-]+)/i);
-  if(tdMatch) result.testedOn = tdMatch[1].trim();
+  // Fallback test-number detection — also scan body text for "Practice Test #N".
+  if(result.testNumber == null){
+    const ptm = fullText.match(/Practice Test\s*#?\s*(\d+)/i);
+    if(ptm) result.testNumber = parseInt(ptm[1]);
+  }
+  // Tested-on date — accept several labels + formats. Normalizes to YYYY-MM-DD.
+  for(const label of ["Tested on", "Test date", "Date tested", "Taken on", "Date taken"]){
+    let m = null;
+    try { m = fullText.match(new RegExp(label + "[:\\s]*([\\d\\/\\-]+|[A-Za-z]+\\s+\\d{1,2},?\\s+\\d{4})", "i")); }
+    catch { m = null; }
+    if(m){
+      const norm = _normalizeReportDate(m[1]);
+      if(norm){ result.testedOn = norm; break; }
+      if(!result.testedOn) result.testedOn = m[1].trim(); // store raw fallback
+    }
+  }
 
   // Total score
   const totalMatch = fullText.match(/TOTAL SCORE\s+(\d{3,4})/i);
@@ -1234,17 +1257,58 @@ async function parseWelledReport(file){
   const totalRaw = fullText.match(/Total\s*:\s*(\d+)\s*\/\s*(\d+)/i);
   if(totalRaw) result.rawScores["Total"] = {correct:parseInt(totalRaw[1]),total:parseInt(totalRaw[2])};
 
-  // Subskill breakdown: "Words in Context 10/12" pattern
-  const skillRx = /([A-Z][A-Za-z &\-,]+?)\s+(\d+)\s*\/\s*(\d+)/g;
-  let sm;
-  const skipPatterns = /^(Module|Total|Reading|Math|TOTAL|SECTION|Raw|Test|Name|Tested)/;
-  while((sm=skillRx.exec(fullText))!==null){
-    const name = sm[1].trim();
-    if(!skipPatterns.test(name) && name.length>3 && name.length<60){
-      result.subskills.push({name, earn:parseInt(sm[2]), poss:parseInt(sm[3])});
+  // Session 18C v2: WellEd reports do NOT have subskill granularity that
+  // maps to our catalog's subdomain taxonomy. They only have the 8
+  // standard SAT domains in "Category Scores". So we extract those as
+  // DOMAIN entries (not subskills). Subskills array stays empty.
+  //
+  // Per Aidan: "for subskills, the only things that count toward them
+  // are the diagnostic and the scored worksheets. WellEd assignments
+  // and practice tests/sections should only be counted toward overall
+  // domains."
+  const _WELLED_DOMAIN_MAP = [
+    ["Information & Ideas",              "Reading & Writing", "information\\s*(?:and|&)\\s*ideas"],
+    ["Craft & Structure",                "Reading & Writing", "craft\\s*(?:and|&)\\s*structure"],
+    ["Expression of Ideas",              "Reading & Writing", "expression\\s*of\\s*ideas"],
+    ["Standard English Conventions",     "Reading & Writing", "standard\\s*english\\s*conventions"],
+    ["Algebra",                          "Math",              "(?<!comp\\s)algebra\\b"],
+    ["Advanced Math",                    "Math",              "advanced\\s*math"],
+    ["Problem-Solving & Data Analysis",  "Math",              "problem[\\s\\-]*solving\\s*(?:and|&)\\s*data\\s*analysis"],
+    ["Geometry & Trigonometry",          "Math",              "geometry\\s*(?:and|&)\\s*trigonometry"],
+  ];
+  for(const [name, subject, srcFrag] of _WELLED_DOMAIN_MAP){
+    let m = null;
+    try { m = fullText.match(new RegExp(srcFrag + "\\s*(\\d+)\\s*\\/\\s*(\\d+)", "i")); }
+    catch { m = null; } // negative lookbehind may not be supported in older browsers; bail safely
+    if(m){
+      const earn = parseInt(m[1]);
+      const poss = parseInt(m[2]);
+      if(Number.isFinite(earn) && Number.isFinite(poss) && poss > 0){
+        result.domains.push({subject, name, earn, poss});
+      }
     }
   }
   return result;
+}
+
+// Normalize a date string from a WellEd report to YYYY-MM-DD.
+function _normalizeReportDate(raw){
+  if(!raw) return null;
+  const s = String(raw).trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if(m) return `${m[1]}-${String(m[2]).padStart(2,"0")}-${String(m[3]).padStart(2,"0")}`;
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(m){
+    const yr = m[3].length === 2 ? `20${m[3]}` : m[3];
+    return `${yr}-${String(m[1]).padStart(2,"0")}-${String(m[2]).padStart(2,"0")}`;
+  }
+  const MONTHS = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
+  m = s.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+  if(m){
+    const mo = MONTHS[m[1].slice(0,3).toLowerCase()];
+    if(mo) return `${m[3]}-${mo}-${String(m[2]).padStart(2,"0")}`;
+  }
+  return null;
 }
 
 /* ============ HEAT COLORS ============ */
@@ -4020,14 +4084,37 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
       for(const f of files){
         try{
           const r = await parseWelledReport(f);
-          // Log scores to student's score history
+          // Session 18C v2: build a score entry whose top-line max
+          // reflects the actual test scope. Full reports are /1600;
+          // section-only reports are /800. The aggregator
+          // (allScoreDataPoints) reads welledReport.{type,rwScore,
+          // mathScore,totalScore,domains} to emit one time-point per
+          // section + one per domain — not a per-test-number bucket.
+          let topLineScore = "";
+          let topLineMax = "1600";
+          if(r.type === "rw-only" && r.rwScore){
+            topLineScore = r.rwScore;
+            topLineMax = "800";
+          } else if(r.type === "math-only" && r.mathScore){
+            topLineScore = r.mathScore;
+            topLineMax = "800";
+          } else {
+            topLineScore = r.totalScore || ((r.rwScore||0)+(r.mathScore||0)) || "";
+            topLineMax = "1600";
+          }
+          const testLabel = r.testNumber
+            ? (r.type === "rw-only" ? `WellEd PT #${r.testNumber} (Reading)`
+              : r.type === "math-only" ? `WellEd PT #${r.testNumber} (Math)`
+              : `WellEd Practice Test ${r.testNumber}`)
+            : "WellEd Report";
           const scoreEntry = {
-            id:uid(), date:r.testedOn||todayStr(),
-            testType:`WellEd Practice Test ${r.testNumber||"?"}`,
-            score:r.totalScore||((r.rwScore||0)+(r.mathScore||0))||"",
-            maxScore:"1600",
-            notes:`R&W: ${r.rwScore||"N/A"}, Math: ${r.mathScore||"N/A"}. Type: ${r.type}. ${r.subskills.length} subskills parsed.`,
-            welledReport:r,
+            id:uid(),
+            date: r.testedOn || todayStr(),
+            testType: testLabel,
+            score: topLineScore,
+            maxScore: topLineMax,
+            notes: `R&W: ${r.rwScore||"—"}, Math: ${r.mathScore||"—"}, Type: ${r.type}, Tested: ${r.testedOn||"unknown"}, Domains parsed: ${r.domains.length}/8`,
+            welledReport: r,
           };
           const upd = students.map(st=>{
             if(st.id!==profile.id) return st;
@@ -4035,7 +4122,7 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
           });
           setStudents(upd);
           setProfile(upd.find(st=>st.id===profile.id));
-          showToast(`WellEd report parsed: Test #${r.testNumber||"?"} — ${r.totalScore||"N/A"}`);
+          showToast(`WellEd report parsed: ${testLabel} — ${topLineScore || "N/A"}, ${r.domains.length} domains`);
         }catch(err){
           console.error("WellEd parse error",f.name,err);
           showToast(`Failed to parse ${f.name}: ${err.message}`);
@@ -8650,41 +8737,89 @@ function allScoreDataPoints(student, submissions = []){
       pts.push({date:dd,category:`${s.subject} — ${s.domain} — ${s.name}`,subcategory:s.name,subject:s.subject,domain:s.domain,subskill:s.name,score:s.earn,max:s.poss,source:"diagnostic",pct:s.pct,level:"sub",_label:"Diagnostic"});
     });
   }
-  // 2. Manual scores
+  // 2. Manual scores + WellEd report-parsed scores
   (student.scores||[]).forEach(sc=>{
-    pts.push({date:sc.date,category:sc.testType,subcategory:sc.testType,score:Number(sc.score)||0,max:Number(sc.maxScore)||null,source:"manual",note:sc.notes||"",_id:sc.id,_label:sc.testType||"Manual"});
-    // ── Gap #1: WellEd report subskill breakdown → time-points ───────────
-    // When a WellEd report is uploaded, parseWelledReport extracts
-    // subskills:[{name, earn, poss}]. Previously this data was stored but
-    // not surfaced in score tracking. Now each subskill becomes a level:"sub"
-    // time-point so per-test progression shows up in domain card expansions.
-    if(sc.welledReport && Array.isArray(sc.welledReport.subskills)){
-      const testDate = sc.welledReport.testedOn || sc.date;
-      const testNum = sc.welledReport.testNumber;
-      const testLabel = testNum ? `WellEd PT #${testNum}` : "WellEd Report";
-      sc.welledReport.subskills.forEach(sub=>{
-        if(!sub || !sub.name) return;
-        // Try to infer subject from name pattern (Math-named subskills vs R&W).
-        // Heuristic — names containing 'Equation', 'Function', 'Algebra',
-        // 'Geometry', 'Trigonometry', 'Math', 'Data', 'Probability' → Math.
-        const subj = /Equation|Function|Algebra|Geometry|Trigonometry|Data|Probability|Math|Trig/i.test(sub.name) ? "Math" : "Reading & Writing";
-        const pct = sub.poss ? Math.round((sub.earn/sub.poss)*100) : null;
+    // ── WellEd report → section + domain time-points (Session 18C v2) ────
+    // WellEd reports are scored practice tests. Their data flows into:
+    //   - The diagnostic-shared "R&W Section" / "Math Section" / "Total
+    //     SAT" cards (so they appear on the same line as the diagnostic
+    //     baseline, not as separate per-test cards).
+    //   - The per-domain cards (one DOMAIN-level point per category in
+    //     welledReport.domains).
+    //   - NOT subskill cards — WellEd reports don't have subskill
+    //     granularity that aligns with the catalog subdomains. Per
+    //     Aidan's directive, subskills are reserved for diagnostic +
+    //     scored worksheets only.
+    if(sc.welledReport){
+      const wr = sc.welledReport;
+      const testDate = wr.testedOn || sc.date || todayStr();
+      const testNum = wr.testNumber;
+      const labelPrefix = testNum ? `WellEd PT #${testNum}` : "WellEd Report";
+      // Section + Total points — aggregated by category with diagnostic.
+      // Full report: emits R&W, Math, AND Total. Section-only: emits
+      // only the relevant section.
+      if(wr.rwScore){
         pts.push({
           date: testDate,
-          category: sub.name,
-          subcategory: sub.name,
-          subject: subj,
-          subskill: sub.name,
-          score: sub.earn,
-          max: sub.poss,
-          pct,
-          source: "welled_report_sub",
-          level: "sub",
+          category: "R&W Section",
+          subcategory: "R&W Section",
+          section: "rw",
+          score: wr.rwScore, max: 800,
+          source: "welled_report",
+          _label: `${labelPrefix} — R&W`,
           _scoreId: sc.id,
-          _label: testLabel,
+        });
+      }
+      if(wr.mathScore){
+        pts.push({
+          date: testDate,
+          category: "Math Section",
+          subcategory: "Math Section",
+          section: "math",
+          score: wr.mathScore, max: 800,
+          source: "welled_report",
+          _label: `${labelPrefix} — Math`,
+          _scoreId: sc.id,
+        });
+      }
+      if(wr.type === "full" && (wr.totalScore || (wr.rwScore && wr.mathScore))){
+        pts.push({
+          date: testDate,
+          category: "Total SAT",
+          subcategory: "Total SAT",
+          section: "full",
+          score: wr.totalScore || (wr.rwScore + wr.mathScore),
+          max: 1600,
+          source: "welled_report",
+          _label: `${labelPrefix} — Total`,
+          _scoreId: sc.id,
+        });
+      }
+      // Domain time-points — one per category score (8 for full report,
+      // 4 for section-only). Earn/poss come straight from the report so
+      // they reflect per-test variation in question distribution.
+      (wr.domains || []).forEach(d=>{
+        if(!d || !d.name || !d.poss) return;
+        const pct = Math.round((d.earn/d.poss)*100);
+        pts.push({
+          date: testDate,
+          category: `${d.subject} — ${d.name}`,
+          subcategory: d.name,
+          subject: d.subject,
+          domain: d.name,
+          score: d.earn, max: d.poss, pct,
+          source: "welled_report",
+          level: "domain",
+          _scoreId: sc.id,
+          _label: labelPrefix,
         });
       });
+      // Do NOT also push the legacy manual point for this score —
+      // its data is fully covered by the section + domain emissions above.
+      return;
     }
+    // ── Plain manual score (not from a parsed WellEd report) ─────────────
+    pts.push({date:sc.date,category:sc.testType,subcategory:sc.testType,score:Number(sc.score)||0,max:Number(sc.maxScore)||null,source:"manual",note:sc.notes||"",_id:sc.id,_label:sc.testType||"Manual"});
   });
   // 3 & 4. Assignment history — practice exam scores + WellEd domain scores
   (student.assignments||[]).forEach(a=>{
