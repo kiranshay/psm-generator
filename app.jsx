@@ -4312,7 +4312,9 @@ function StudentSummaryCard({student}){
   }));
 
   // Recent score breakdown — most recent data point per domain and per subdomain
-  const scorePts = useMemo(()=>allScoreDataPoints(student),[student]);
+  // Session 18A: include graded submissions so the breakdown reflects portal grading.
+  const {submissions: summarySubmissions} = useTutorSubmissions(student?.id);
+  const scorePts = useMemo(()=>allScoreDataPoints(student, summarySubmissions),[student, summarySubmissions]);
   const latestDomainByKey = useMemo(()=>{
     const m = {};
     scorePts.forEach(pt=>{
@@ -5246,7 +5248,8 @@ function ParentPortal({onSignOut, currentUserEntry}){
 }
 
 function PortalTrackingTab({student, submissions}){
-  const pts = allScoreDataPoints(student);
+  // Session 18A: graded submissions feed in as time-points (Gap #2 fix).
+  const pts = allScoreDataPoints(student, submissions);
   const diagProfile = (student.diagnostics||[]).length ? buildDiagnosticProfile(student.diagnostics) : null;
   const welled = (student.welledLogs||[]).filter(l=>!l.deleted);
 
@@ -6891,6 +6894,53 @@ function HeatMapTab({students,openProfile}){
 }
 
 /* ============ EDITORIAL SVG LINE CHART ============ */
+// Session 18A: legend that explains what each numbered point on a chart
+// is. The user's exact ask was "a list below each graph just explaining
+// what the numbered time points are too." Takes the same `pts` array
+// the chart is built from (already sorted by date) and renders a small
+// table-like list: "1. 2025-09-15 · Diagnostic (32/54)".
+//
+// Compact mode (compact: true) renders one-line entries; otherwise it's
+// a two-line block per point.
+function TimelineLegend({points, compact, max}){
+  if(!points || points.length === 0) return null;
+  return (
+    <div style={{
+      marginTop: 8,
+      paddingTop: 8,
+      borderTop: "1px dashed rgba(15,26,46,.12)",
+      fontFamily: "'IBM Plex Mono',monospace",
+      fontSize: 9,
+      color: "#0F1A2E",
+      letterSpacing: 0.15,
+      lineHeight: 1.5,
+    }}>
+      <div style={{
+        color:"#66708A", fontWeight:600, letterSpacing:.8, textTransform:"uppercase",
+        fontSize:8, marginBottom:5,
+      }}>Time-points (in order)</div>
+      <div style={{display:"flex", flexDirection: compact?"row":"column", flexWrap:"wrap", gap: compact?"4px 12px":4}}>
+        {points.map((pt, i) => {
+          const label = pt._label || pt.subcategory || pt.category || "Score";
+          const scorePart = pt.max ? `${pt.score}/${pt.max}` : (pt.score!=null?String(pt.score):"");
+          const pctPart = pt.pct!=null ? `${pt.pct}%` : (pt.max?`${Math.round((pt.score/pt.max)*100)}%`:"");
+          const date = (pt.date||"").slice(0,10);
+          return (
+            <div key={i} style={{display:"flex", gap:6, alignItems:"baseline"}}>
+              <span style={{fontWeight:700, color:"#66708A", minWidth:16, textAlign:"right"}}>{i+1}.</span>
+              <span style={{color:"#66708A"}}>{date}</span>
+              <span style={{color:"#0F1A2E", fontWeight:500}}>{label}</span>
+              {scorePart && <span style={{color:"#66708A"}}>·</span>}
+              {scorePart && <span style={{fontVariantNumeric:"tabular-nums", color:"#0F1A2E"}}>{scorePart}</span>}
+              {pctPart && <span style={{color:"#4C7A4C", fontWeight:600, fontVariantNumeric:"tabular-nums"}}>({pctPart})</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function LineChart({points, color="#004A79", max, height=80, width=260}){
   // points: [{x:number, y:number, label?:string}]  x = 0..N-1 typically
   if(!points || points.length===0) return <div style={{fontSize:10,color:"#66708A",fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic"}}>No data</div>;
@@ -7283,7 +7333,11 @@ function TutorSubmissionRow({studentId, submission}){
 
 /* ============ SCORE HISTORY PANEL (inside StudentProfile) ============ */
 function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, delWelledLog, handleWelledUpload, welledInputRef}){
-  const pts = allScoreDataPoints(p);
+  // Session 18A: submissions feed graded-submission time-points into the
+  // score-tracking pipeline. Wired through useTutorSubmissions which is
+  // a live snapshot — the panel updates the moment a student submits.
+  const {submissions: panelSubmissions} = useTutorSubmissions(p?.id);
+  const pts = allScoreDataPoints(p, panelSubmissions);
   const [expanded,setExpanded] = useState({}); // {domainKey: true}
   const [diffFilter,setDiffFilter] = useState("all"); // all|easy|medium|hard|comprehensive
   const [wlog,setWlog] = useState({date:todayStr(),subject:"Reading & Writing",domain:"Information & Ideas",difficulty:"medium",score:"",notes:""});
@@ -7389,6 +7443,8 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
         {lastPct!=null && <div style={{marginBottom:8}}><PctBar value={lastPct} width={150}/></div>}
         <LineChart points={chartPoints} color={accent} max={100} height={60} width={230}/>
         <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#66708A",marginTop:6,letterSpacing:.2}}>{ptsArr.length} pt{ptsArr.length!==1?"s":""} · {last.date} · {srcLabels.join(", ")}</div>
+        {/* Session 18A: legend below the subskill mini-chart */}
+        <TimelineLegend points={ptsArr} compact={false}/>
       </div>
     );
   };
@@ -7424,8 +7480,12 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
         {/* Body: chart + difficulty breakdown */}
         <div style={{padding:20}}>
           {filtered.length>0 ? (
-            <div style={{display:"grid",gridTemplateColumns:"1fr 200px",gap:20,alignItems:"center"}}>
-              <LineChart points={chartPoints} color={color} max={100} height={110} width={400}/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 200px",gap:20,alignItems:"start"}}>
+              <div>
+                <LineChart points={chartPoints} color={color} max={100} height={110} width={400}/>
+                {/* Session 18A: legend below the main domain chart */}
+                <TimelineLegend points={filtered} compact={false}/>
+              </div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:11,fontStyle:"italic",color:"#66708A",marginBottom:2}}>By Difficulty</div>
                 {DIFF_ORDER.map(diff=>{
@@ -7693,55 +7753,98 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
 //   3. Practice exam scores from assignment history
 //   4. WellEd Domain scores from assignment history (split by E/M/H)
 // Each point: {date, category, subcategory, score, max, source, note, difficulty?}
-function allScoreDataPoints(student){
+function allScoreDataPoints(student, submissions = []){
   const pts = [];
-  // 1. Diagnostic → section + total scores
+  // 1. Diagnostic → section + total + domain + subskill scores. Diagnostic
+  // is the anchor "day-0" baseline — it should be the first time-point in
+  // every domain and subskill series. Uses the parsedAt date (when the
+  // tutor uploaded the PDF) — if uploaded late, drop the day by 1ms below
+  // any same-date assignment so sort order puts the diagnostic first.
   if(student.diagnostics?.length){
     const diag = buildDiagnosticProfile(student.diagnostics);
     const dd = student.diagnostics[0]?.parsedAt || todayStr();
-    if(diag.rwScore)   pts.push({date:dd,category:"R&W Section",subcategory:"R&W Section",score:Math.round((diag.rwScore.lower+diag.rwScore.upper)/2),max:800,source:"diagnostic",note:`Range: ${diag.rwScore.lower}–${diag.rwScore.upper}`});
-    if(diag.mathScore) pts.push({date:dd,category:"Math Section",subcategory:"Math Section",score:Math.round((diag.mathScore.lower+diag.mathScore.upper)/2),max:800,source:"diagnostic",note:`Range: ${diag.mathScore.lower}–${diag.mathScore.upper}`});
-    if(diag.totalLower!=null) pts.push({date:dd,category:"Total SAT",subcategory:"Total SAT",score:Math.round((diag.totalLower+diag.totalUpper)/2),max:1600,source:"diagnostic",note:`Range: ${diag.totalLower}–${diag.totalUpper}`});
-    // Domain-level diagnostic %s
+    if(diag.rwScore)   pts.push({date:dd,category:"R&W Section",subcategory:"R&W Section",section:"rw",score:Math.round((diag.rwScore.lower+diag.rwScore.upper)/2),max:800,source:"diagnostic",note:`Range: ${diag.rwScore.lower}–${diag.rwScore.upper}`,_label:"Diagnostic — R&W"});
+    if(diag.mathScore) pts.push({date:dd,category:"Math Section",subcategory:"Math Section",section:"math",score:Math.round((diag.mathScore.lower+diag.mathScore.upper)/2),max:800,source:"diagnostic",note:`Range: ${diag.mathScore.lower}–${diag.mathScore.upper}`,_label:"Diagnostic — Math"});
+    if(diag.totalLower!=null) pts.push({date:dd,category:"Total SAT",subcategory:"Total SAT",section:"full",score:Math.round((diag.totalLower+diag.totalUpper)/2),max:1600,source:"diagnostic",note:`Range: ${diag.totalLower}–${diag.totalUpper}`,_label:"Diagnostic — Total"});
+    // Domain-level diagnostic %s — these populate the domain card's chart.
     (diag.domains||[]).forEach(d=>{
-      pts.push({date:dd,category:`${d.subject} — ${d.name}`,subcategory:d.name,subject:d.subject,domain:d.name,score:d.earn,max:d.poss,source:"diagnostic",pct:d.pct,level:"domain"});
+      pts.push({date:dd,category:`${d.subject} — ${d.name}`,subcategory:d.name,subject:d.subject,domain:d.name,score:d.earn,max:d.poss,source:"diagnostic",pct:d.pct,level:"domain",_label:"Diagnostic"});
     });
-    // Subdomain-level diagnostic %s
+    // Subdomain-level diagnostic %s — these populate the subskill expansion.
     (diag.subs||[]).forEach(s=>{
-      pts.push({date:dd,category:`${s.subject} — ${s.domain} — ${s.name}`,subcategory:s.name,subject:s.subject,domain:s.domain,subskill:s.name,score:s.earn,max:s.poss,source:"diagnostic",pct:s.pct,level:"sub"});
+      pts.push({date:dd,category:`${s.subject} — ${s.domain} — ${s.name}`,subcategory:s.name,subject:s.subject,domain:s.domain,subskill:s.name,score:s.earn,max:s.poss,source:"diagnostic",pct:s.pct,level:"sub",_label:"Diagnostic"});
     });
   }
   // 2. Manual scores
   (student.scores||[]).forEach(sc=>{
-    pts.push({date:sc.date,category:sc.testType,subcategory:sc.testType,score:Number(sc.score)||0,max:Number(sc.maxScore)||null,source:"manual",note:sc.notes||"",_id:sc.id});
+    pts.push({date:sc.date,category:sc.testType,subcategory:sc.testType,score:Number(sc.score)||0,max:Number(sc.maxScore)||null,source:"manual",note:sc.notes||"",_id:sc.id,_label:sc.testType||"Manual"});
+    // ── Gap #1: WellEd report subskill breakdown → time-points ───────────
+    // When a WellEd report is uploaded, parseWelledReport extracts
+    // subskills:[{name, earn, poss}]. Previously this data was stored but
+    // not surfaced in score tracking. Now each subskill becomes a level:"sub"
+    // time-point so per-test progression shows up in domain card expansions.
+    if(sc.welledReport && Array.isArray(sc.welledReport.subskills)){
+      const testDate = sc.welledReport.testedOn || sc.date;
+      const testNum = sc.welledReport.testNumber;
+      const testLabel = testNum ? `WellEd PT #${testNum}` : "WellEd Report";
+      sc.welledReport.subskills.forEach(sub=>{
+        if(!sub || !sub.name) return;
+        // Try to infer subject from name pattern (Math-named subskills vs R&W).
+        // Heuristic — names containing 'Equation', 'Function', 'Algebra',
+        // 'Geometry', 'Trigonometry', 'Math', 'Data', 'Probability' → Math.
+        const subj = /Equation|Function|Algebra|Geometry|Trigonometry|Data|Probability|Math|Trig/i.test(sub.name) ? "Math" : "Reading & Writing";
+        const pct = sub.poss ? Math.round((sub.earn/sub.poss)*100) : null;
+        pts.push({
+          date: testDate,
+          category: sub.name,
+          subcategory: sub.name,
+          subject: subj,
+          subskill: sub.name,
+          score: sub.earn,
+          max: sub.poss,
+          pct,
+          source: "welled_report_sub",
+          level: "sub",
+          _scoreId: sc.id,
+          _label: testLabel,
+        });
+      });
+    }
   });
   // 3 & 4. Assignment history — practice exam scores + WellEd domain scores
   (student.assignments||[]).forEach(a=>{
     (a.practiceExams||[]).forEach(ex=>{
       const isFull = ex.type!=="section";
+      // ── Gap #3: explicit `section` field on every history_exam point ───
+      // Previously section was encoded only in the category string; filtering
+      // required regex. Now stored as section: "rw" | "math" | "full".
+      const examNumberLabel = ex.number ? `${ex.platform} #${ex.number}` : ex.platform;
       if(isFull){
         const rw = Number(ex.rwScore)||0, math = Number(ex.mathScore)||0;
         if(ex.rwScore || ex.mathScore){
-          if(ex.rwScore)   pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"} — R&W`,subcategory:`${ex.platform} Full — R&W`,score:rw,max:800,source:"history_exam"});
-          if(ex.mathScore) pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"} — Math`,subcategory:`${ex.platform} Full — Math`,score:math,max:800,source:"history_exam"});
-          if(ex.rwScore && ex.mathScore) pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"} — Total`,subcategory:`${ex.platform} Full — Total`,score:rw+math,max:1600,source:"history_exam"});
+          if(ex.rwScore)   pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"} — R&W`,subcategory:`${ex.platform} Full — R&W`,section:"rw",score:rw,max:800,source:"history_exam",_label:`${examNumberLabel} R&W`});
+          if(ex.mathScore) pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"} — Math`,subcategory:`${ex.platform} Full — Math`,section:"math",score:math,max:800,source:"history_exam",_label:`${examNumberLabel} Math`});
+          if(ex.rwScore && ex.mathScore) pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"} — Total`,subcategory:`${ex.platform} Full — Total`,section:"full",score:rw+math,max:1600,source:"history_exam",_label:`${examNumberLabel} Total`});
         } else if(ex.score){
-          pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"}`,subcategory:`${ex.platform} Full — Total`,score:Number(ex.score)||0,max:1600,source:"history_exam"});
+          pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"}`,subcategory:`${ex.platform} Full — Total`,section:"full",score:Number(ex.score)||0,max:1600,source:"history_exam",_label:examNumberLabel});
         }
       } else if(ex.score && ex.score!==""){
         const subj = ex.sectionSubject ? ` — ${ex.sectionSubject}` : "";
-        pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"} Section${subj}`,subcategory:`${ex.platform} Section${subj}`,score:Number(ex.score)||0,max:800,source:"history_exam"});
+        const sectionField = ex.sectionSubject === "Math" ? "math" : ex.sectionSubject === "R&W" ? "rw" : "full";
+        pts.push({date:a.date,category:`${ex.platform} Practice #${ex.number||"?"} Section${subj}`,subcategory:`${ex.platform} Section${subj}`,section:sectionField,score:Number(ex.score)||0,max:800,source:"history_exam",_label:`${examNumberLabel} ${ex.sectionSubject||"Section"}`});
       }
     });
     (a.welledDomain||[]).forEach(w=>{
       if(w.score && w.score!==""){
         const cat = `${w.subject} — ${w.domain}`;
-        pts.push({date:a.date,category:cat,subcategory:w.domain,subject:w.subject,domain:w.domain,score:Number(w.score)||0,max:w.qs||(w.subject==="Math"?22:27),source:"history_welled",difficulty:w.difficulty,level:"domain"});
+        const diffLabel = w.difficulty ? ` ${w.difficulty[0].toUpperCase()+w.difficulty.slice(1)}` : "";
+        pts.push({date:a.date,category:cat,subcategory:w.domain,subject:w.subject,domain:w.domain,score:Number(w.score)||0,max:w.qs||(w.subject==="Math"?22:27),source:"history_welled",difficulty:w.difficulty,level:"domain",_label:`WellEd Domain${diffLabel}`});
       }
     });
   });
   // 5. Standalone WellEd domain logs (continuous tracking, not tied to an assignment)
   (student.welledLogs||[]).forEach(log=>{
+    const diffLabel = log.difficulty ? ` ${log.difficulty[0].toUpperCase()+log.difficulty.slice(1)}` : "";
     pts.push({
       date:log.date,
       category:`${log.subject} — ${log.domain}`,
@@ -7754,7 +7857,84 @@ function allScoreDataPoints(student){
       difficulty:log.difficulty,
       level:"domain",
       _id:log.id,
-      note:log.notes||""
+      note:log.notes||"",
+      _label:`WellEd Log${diffLabel}`,
+    });
+  });
+  // ── Gap #2: graded portal submissions → time-points ─────────────────────
+  // Each submitted+graded submission contributes one time-point per worksheet
+  // at BOTH level:"domain" (for the domain-card aggregate chart) and
+  // level:"sub" (for the subskill expansion). Worksheet metadata
+  // (subject/domain/subdomain/difficulty) comes from the assignment row
+  // since the catalog isn't always available at aggregation time.
+  // Source value distinguishes graded-submission points from manual entry.
+  (submissions || []).forEach(sub=>{
+    if(!sub || sub.status !== "submitted") return;
+    if(typeof sub.scoreCorrect !== "number" || typeof sub.scoreTotal !== "number") return;
+    if(!Array.isArray(sub.perQuestion)) return;
+    // Find the matching assignment to pull worksheet metadata.
+    const asg = (student.assignments||[]).find(a => a && a.id === sub.assignmentId);
+    if(!asg) return;
+    const worksheetsById = new Map((asg.worksheets||[]).map(w => [w.id, w]));
+    // Group perQuestion entries by worksheetId.
+    const byWs = new Map();
+    for(const pq of sub.perQuestion){
+      if(!pq || !pq.worksheetId) continue;
+      if(!byWs.has(pq.worksheetId)) byWs.set(pq.worksheetId, []);
+      byWs.get(pq.worksheetId).push(pq);
+    }
+    const dateStr = (() => {
+      if(typeof sub.submittedAt === "string") return sub.submittedAt.slice(0,10);
+      if(sub.submittedAt && sub.submittedAt.toDate){
+        try { return sub.submittedAt.toDate().toISOString().slice(0,10); } catch { /**/ }
+      }
+      return asg.date || todayStr();
+    })();
+    byWs.forEach((pqs, wsId)=>{
+      const w = worksheetsById.get(wsId);
+      if(!w) return;
+      const correct = pqs.filter(p => p.correct === true).length;
+      const total   = pqs.filter(p => p.correct === true || p.correct === false).length;
+      if(total === 0) return;
+      const pct = Math.round((correct/total)*100);
+      const wsLabel = w.title || `${w.domain||""} ${w.difficulty||""}`;
+      // domain-level point (for domain card)
+      pts.push({
+        date: dateStr,
+        category: `${w.subject||"Unknown"} — ${w.domain||"Unknown"}`,
+        subcategory: w.domain,
+        subject: w.subject,
+        domain: w.domain,
+        score: correct,
+        max: total,
+        pct,
+        source: "submission_graded",
+        difficulty: w.difficulty,
+        level: "domain",
+        _label: `${wsLabel} (submitted)`,
+        _subId: sub.id,
+        _wsId: wsId,
+      });
+      // sub-level point (for subskill expansion)
+      if(w.subdomain){
+        pts.push({
+          date: dateStr,
+          category: `${w.subject} — ${w.domain} — ${w.subdomain}`,
+          subcategory: w.subdomain,
+          subject: w.subject,
+          domain: w.domain,
+          subskill: w.subdomain,
+          score: correct,
+          max: total,
+          pct,
+          source: "submission_graded",
+          difficulty: w.difficulty,
+          level: "sub",
+          _label: `${wsLabel} (submitted)`,
+          _subId: sub.id,
+          _wsId: wsId,
+        });
+      }
     });
   });
   return pts.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
