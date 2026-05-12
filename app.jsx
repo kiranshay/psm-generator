@@ -2420,6 +2420,11 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
   // Wise CSV import staging — null = no import in progress, object = preview dialog open.
   const[wiseImport,setWiseImport]=useState(null);
   const wiseInputRef=useRef(null);
+  // Session 18C: Wise API sync staging. `null` = no sync in progress.
+  // `{loading:true}` = pulling preview from server.
+  // `{summary, plan}` = preview returned, awaiting confirm.
+  // `{committing:true, summary, plan}` = user confirmed, executing.
+  const[wiseSync,setWiseSync]=useState(null);
   // Global search (⌘K / Ctrl+K)
   const[searchOpen,setSearchOpen]=useState(false);
   const[searchQuery,setSearchQuery]=useState("");
@@ -3541,6 +3546,111 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
         );
       })()}
 
+      {/* Session 18C: Wise API sync preview modal */}
+      {wiseSync && (()=>{
+        if(wiseSync.loading){
+          return (
+            <div style={{position:"fixed",inset:0,background:"rgba(15,26,46,.55)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <div style={{background:"var(--card)",border:"1px solid var(--rule)",borderRadius:14,padding:"32px 40px",fontFamily:"var(--font-display)",fontSize:18,color:"var(--ink)"}}>
+                Pulling roster from Wise API…
+              </div>
+            </div>
+          );
+        }
+        if(wiseSync.error){
+          return null;
+        }
+        const summary = wiseSync.summary || {};
+        const plan = wiseSync.plan || {};
+        const toAdd = plan.toAdd || [];
+        const toUpdate = plan.toUpdate || [];
+        const toTrash = plan.toTrash || [];
+        const errs = plan.errors || [];
+        const committing = !!wiseSync.committing;
+        const committed = !!wiseSync.committed;
+        return (
+          <div style={{position:"fixed",inset:0,background:"rgba(15,26,46,.55)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:"40px 24px"}} onClick={()=>!committing && setWiseSync(null)}>
+            <div onClick={e=>e.stopPropagation()} style={{background:"var(--card)",border:"1px solid var(--rule)",borderRadius:14,boxShadow:"var(--shadow-lg)",maxWidth:880,width:"100%",maxHeight:"88vh",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,var(--brand) 0,var(--brand) 72px,transparent 72px)"}}/>
+              <div style={{padding:"28px 32px 18px",borderBottom:"1px solid var(--rule)"}}>
+                <div style={{fontFamily:"var(--font-body)",fontSize:10,fontWeight:600,letterSpacing:"0.18em",textTransform:"uppercase",color:"var(--ink-mute)",marginBottom:6}}>Wise API · Sync Preview</div>
+                <h2 style={{fontFamily:"var(--font-display)",fontVariationSettings:"'opsz' 144, 'SOFT' 20",fontWeight:600,fontSize:26,letterSpacing:"-0.02em",margin:"0 0 10px",lineHeight:1.1}}>
+                  {committed ? "Sync complete" : `Pulled ${summary.totalWise||0} students from Wise`}
+                </h2>
+                <div style={{fontSize:13,color:"var(--ink-soft)",lineHeight:1.55,maxWidth:680}}>
+                  {summary.satCount||0} in SAT classes · {summary.nonSatCount||0} non-SAT (not affected unless already imported).
+                  {!committed && " Existing data (assignments, scores, diagnostics) on already-imported students is preserved — only the Wise metadata gets updated."}
+                </div>
+                <div style={{marginTop:14,display:"flex",gap:14,flexWrap:"wrap"}}>
+                  <span style={{...mkPill("transparent","#4C7A4C"),border:"1px solid rgba(76,122,76,.4)",fontWeight:600}}>+ {summary.toAddCount||0} new</span>
+                  <span style={{...mkPill("transparent","#003258"),border:"1px solid rgba(0,50,88,.35)",fontWeight:600}}>~ {summary.toUpdateCount||0} update meta</span>
+                  <span style={{...mkPill("transparent","#8C2E2E"),border:"1px solid rgba(140,46,46,.4)",fontWeight:600}}>– {summary.toTrashCount||0} trash (lost SAT)</span>
+                  {summary.errorCount>0 && <span style={{...mkPill("transparent","#8C2E2E"),border:"1px solid rgba(140,46,46,.4)",fontWeight:700}}>{summary.errorCount} errors</span>}
+                </div>
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"16px 32px"}}>
+                {[
+                  {label:"Will add (new student + allowlist + Wise metadata)", items:toAdd, color:"#4C7A4C", tone:"rgba(76,122,76,.06)"},
+                  {label:"Will update (preserves existing scores/assignments — only Wise metadata changes)", items:toUpdate, color:"#003258", tone:"rgba(0,50,88,.05)"},
+                  {label:"Will trash (no longer in any SAT class on Wise)", items:toTrash, color:"#8C2E2E", tone:"rgba(140,46,46,.05)"},
+                ].map((sect,si)=>(
+                  sect.items.length===0 ? null : (
+                    <div key={si} style={{marginBottom:18}}>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:sect.color,letterSpacing:1.2,textTransform:"uppercase",marginBottom:8}}>
+                        {sect.label} ({sect.items.length})
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:2,background:sect.tone,padding:8,borderRadius:4,border:`1px solid ${sect.color}22`,maxHeight:240,overflowY:"auto"}}>
+                        {sect.items.map((it,i)=>(
+                          <div key={i} style={{display:"flex",gap:10,alignItems:"baseline",fontSize:12,padding:"3px 6px",borderRadius:2,background:i%2===0?"rgba(255,255,255,.5)":"transparent"}}>
+                            <span style={{flex:"1 1 200px",fontWeight:500,color:"#0F1A2E"}}>{it.name || "(no name)"}</span>
+                            <span style={{flex:"1 1 200px",color:"#66708A",fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}>{it.email || "(no email)"}</span>
+                            {it.reason && <span style={{color:sect.color,fontSize:10,fontFamily:"'IBM Plex Mono',monospace"}}>{it.reason}</span>}
+                            {Array.isArray(it.satClasses) && it.satClasses.length>0 && <span style={{color:sect.color,fontSize:10}}>{it.satClasses[0].name}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                ))}
+                {errs.length>0 && (
+                  <div style={{marginTop:18,padding:12,background:"rgba(140,46,46,.06)",border:"1px solid rgba(140,46,46,.3)",borderRadius:4}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:"#8C2E2E",letterSpacing:1.2,textTransform:"uppercase",marginBottom:6}}>Errors</div>
+                    {errs.map((e,i)=><div key={i} style={{fontSize:12,color:"#0F1A2E",marginBottom:2}}>{e.kind}: {e.studentId||e.name} — {e.message}</div>)}
+                  </div>
+                )}
+                {(toAdd.length+toUpdate.length+toTrash.length)===0 && (
+                  <div style={{textAlign:"center",padding:"40px 20px",color:"var(--ink-soft)",fontStyle:"italic",fontFamily:"'Fraunces',Georgia,serif",fontSize:16}}>
+                    Nothing to do — Wise and the portal are already in sync.
+                  </div>
+                )}
+              </div>
+              <div style={{padding:"16px 32px",borderTop:"1px solid var(--rule)",display:"flex",justifyContent:"flex-end",gap:10}}>
+                <button onClick={()=>!committing && setWiseSync(null)} disabled={committing} style={{...mkBtn("transparent","var(--ink-soft)"),border:"1px solid var(--rule)",padding:"8px 16px",fontSize:12}}>
+                  {committed ? "Close" : "Cancel"}
+                </button>
+                {!committed && (toAdd.length+toUpdate.length+toTrash.length)>0 && (
+                  <button onClick={async()=>{
+                    setWiseSync(prev=>({...prev,committing:true}));
+                    try{
+                      const fn = window.firebase.app().functions("us-central1").httpsCallable("syncStudentsFromWise");
+                      const result = await fn({dryRun:false});
+                      setWiseSync({...result.data, committed:true});
+                      showToast(`Synced: +${result.data.summary.toAddCount} new, ~${result.data.summary.toUpdateCount} updated, -${result.data.summary.toTrashCount} trashed`);
+                    }catch(e){
+                      console.warn("[wise-sync] commit failed:", e);
+                      alert("Sync failed: " + (e.message||e));
+                      setWiseSync(prev=>({...prev,committing:false}));
+                    }
+                  }} disabled={committing} style={{...mkBtn(committing?"rgba(15,26,46,.2)":"#003258","#FAF7F2"),padding:"8px 18px",fontSize:12,fontWeight:600,letterSpacing:.4,textTransform:"uppercase"}}>
+                    {committing ? "Applying…" : "Apply sync"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {wiseImport && (()=>{
         const newCount = wiseImport.rows.filter(r=>!r.duplicate).length;
         const dupCount = wiseImport.rows.filter(r=>r.duplicate).length;
@@ -3674,6 +3784,24 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
             }
           }} title="Check each student against the Wise API (email lookup). Reports which students Wise doesn't know about. Admin-only." style={{cursor:"pointer",background:"none",border:"none",font:"inherit",color:"inherit",padding:0}}>
             Wise API check
+          </button>
+          {/* Session 18C: full API sync — pull all SAT students from
+              Wise, auto-add to allowlist, soft-delete non-SAT students
+              that were previously synced. Two-phase: preview → confirm. */}
+          <button onClick={async()=>{
+            if(!window.firebase || !window.firebase.app){ alert("Firebase not loaded"); return; }
+            setWiseSync({loading:true});
+            try{
+              const fn = window.firebase.app().functions("us-central1").httpsCallable("syncStudentsFromWise");
+              const result = await fn({dryRun:true});
+              setWiseSync(result.data || {error:"empty response"});
+            }catch(e){
+              console.warn("[wise-sync] preview failed:", e);
+              setWiseSync(null);
+              alert("Wise sync preview failed: " + (e.message||e));
+            }
+          }} title="Pull all SAT students from Wise via API. Adds new ones, updates wise-metadata on existing (preserves all your scores/assignments), trashes ones no longer in a SAT class. Admin-only. Preview first." style={{cursor:"pointer",background:"none",border:"none",font:"inherit",color:"inherit",padding:0,fontWeight:600}}>
+            Sync from Wise API
           </button>
           <div data-psm-user title={authUser.email} style={{
             display:"inline-flex",alignItems:"center",gap:8,

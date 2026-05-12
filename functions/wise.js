@@ -288,6 +288,43 @@ async function createDiscussion(cfg, classId, { title, description }) {
   return (body && body.data) || "ok";
 }
 
+// GET /institutes/{institute_id}/students?status=ACCEPTED&page_size=N&page_number=N&showParents=true
+//
+// Session 18C: full institute roster pull. Replaces the manual CSV
+// import workflow with a direct API sync. Each result row carries:
+//   _id, instituteId, userId: {_id, name, email, phoneNumber, ...},
+//   joinedOn, status, classes: [{_id, name, subject, ...}]
+//
+// Paginated — caller walks until an empty page comes back. We default
+// to page_size=100; the Wise API caps at 100.
+async function listInstituteStudents(cfg, { pageNumber = 1, pageSize = 100 } = {}) {
+  const url = `${cfg.host}/institutes/${cfg.instituteId}/students`
+    + `?status=ACCEPTED`
+    + `&page_size=${encodeURIComponent(pageSize)}`
+    + `&page_number=${encodeURIComponent(pageNumber)}`
+    + `&showParents=false&showFeedbackData=false`;
+  const res = await fetch(url, { method: "GET", headers: wiseHeaders(cfg) });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Wise listInstituteStudents ${res.status}: ${text.slice(0, 300)}`);
+  }
+  const body = await res.json();
+  const students = body && body.data && body.data.students;
+  return Array.isArray(students) ? students : [];
+}
+
+// Walks every page of the institute roster and returns the flat array
+// of all student records. Stops when a page returns < pageSize results.
+async function listAllInstituteStudents(cfg, { pageSize = 100 } = {}) {
+  const out = [];
+  for (let page = 1; page <= 50; page++) { // hard cap 5000 students
+    const batch = await listInstituteStudents(cfg, { pageNumber: page, pageSize });
+    out.push(...batch);
+    if (batch.length < pageSize) break;
+  }
+  return out;
+}
+
 module.exports = {
   userByIdentifierEmail,
   resolveWiseUserIdByEmail,
@@ -297,6 +334,8 @@ module.exports = {
   sendChatMessage,
   listInstituteClasses,
   resolveClassForStudent,
+  listInstituteStudents,
+  listAllInstituteStudents,
   getContentTimeline,
   resolvePsmSectionId,
   createAssignment,

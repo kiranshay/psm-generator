@@ -33,6 +33,7 @@ const {
   ensureAdminChat,
   sendChatMessage,
   resolveClassForStudent,
+  listAllInstituteStudents,
   getContentTimeline,
   resolvePsmSectionId,
   createAssignment,
@@ -787,4 +788,229 @@ exports.onWorksheetSubmissionSubmit = onDocumentUpdated(
       scoreTotal:   result.scoreTotal,
     });
   }
+);
+
+// ── syncStudentsFromWise (Session 18C) ────────────────────────────────────
+//
+// Full institute roster sync from Wise API. Admin-only. Replaces the
+// manual CSV-export workflow for bulk imports.
+//
+// Two-phase operation:
+//   1. dryRun:true  → returns the plan {toAdd, toUpdate, toTrash, errors}
+//                     without writing anything.
+//   2. dryRun:false → executes the plan: creates new student docs,
+//                     updates wise metadata on existing ones (preserves
+//                     assignments/scores/diagnostics/welledLogs),
+//                     soft-deletes non-SAT students with source:wise-sync,
+//                     and writes/clears their allowlist entries.
+//
+// SAT match: any of the student classes.name contains "SAT" (case-insensitive).
+//
+// Existing-data preservation: for any student already in Firestore
+// (matched by email or wiseUserId), only meta fields are updated.
+// All other fields are left exactly as-is.
+
+exports.syncStudentsFromWise = onCall(
+  {
+    region: "us-central1",
+    secrets: ALL_WISE_SECRETS,
+    maxInstances: 1,
+    timeoutSeconds: 300,
+  },
+  async (request) => {
+    await verifyCallerIsAdmin(request);
+    const dryRun = !!(request.data && request.data.dryRun);
+
+    const cfg = wiseConfig();
+    const db = admin.firestore();
+
+    const [wiseStudents, fsSnap] = await Promise.all([
+      listAllInstituteStudents(cfg, { pageSize: 100 }),
+      db.collection("students").get(),
+    ]);
+
+    const fsStudents = fsSnap.docs.map(function(d){ return { id: d.id, ref: d.ref, data: d.data() || {} }; });
+
+    const fsByEmail = new Map();
+    const fsByWiseId = new Map();
+    for (const fs of fsStudents) {
+      const email = ((fs.data.meta && fs.data.meta.email) || "").trim().toLowerCase();
+      if (email) fsByEmail.set(email, fs);
+      const wiseId = fs.data.wiseUserId || (fs.data.meta && fs.data.meta.wiseUserId);
+      if (wiseId) fsByWiseId.set(wiseId, fs);
+    }
+
+    const plan = { toAdd: [], toUpdate: [], toTrash: [], errors: [] };
+    const seenFsIds = new Set();
+    let satCount = 0, nonSatCount = 0;
+
+    for (const w of wiseStudents) {
+      const u = (w && w.userId) || {};
+      const wiseUserId = u._id || w._id;
+      const email = (u.email || "").trim().toLowerCase();
+      const name = u.name || "";
+      const classes = Array.isArray(w.classes) ? w.classes : [];
+      const isSat = classes.some(function(c){ return c && typeof c.name === "string" && /\bSAT\b/i.test(c.name); });
+
+      if (isSat) satCount++; else nonSatCount++;
+
+      if (!isSat) continue;
+
+      const fsHit = (email && fsByEmail.get(email)) || (wiseUserId && fsByWiseId.get(wiseUserId)) || null;
+
+      const satClasses = classes
+        .filter(function(c){ return c && /\bSAT\b/i.test(c.name || ""); })
+        .map(function(c){ return { id: c._id, name: c.name, subject: c.subject || "" }; });
+
+      if (fsHit) {
+        seenFsIds.add(fsHit.id);
+        plan.toUpdate.push({
+          studentId: fsHit.id,
+          name: fsHit.data.name,
+          email,
+          wiseUserId,
+          satClasses,
+          updates: {
+            wiseUserId,
+            wiseClassId: (satClasses[0] && satClasses[0].id) || fsHit.data.wiseClassId || null,
+            "meta.email": email || (fsHit.data.meta && fsHit.data.meta.email) || "",
+            "meta.wiseUserId": wiseUserId,
+            "meta.wiseClasses": satClasses,
+            "meta.lastSyncedFromWise": new Date().toISOString(),
+          },
+        });
+      } else {
+        plan.toAdd.push({
+          name,
+          email,
+          wiseUserId,
+          satClasses,
+          dataToWrite: {
+            name,
+            dateAdded: new Date().toISOString().slice(0, 10),
+            wiseUserId,
+            wiseClassId: (satClasses[0] && satClasses[0].id) || null,
+            meta: {
+              email,
+              wiseUserId,
+              wiseClasses: satClasses,
+              source: "wise-sync",
+              lastSyncedFromWise: new Date().toISOString(),
+              joinedOn: w.joinedOn || "",
+            },
+            assignments: [],
+            scores: [],
+            welledLogs: [],
+            diagnostics: [],
+          },
+        });
+      }
+    }
+
+    const wiseByUserId = new Map();
+    for (const w of wiseStudents) {
+      const wid = (w.userId && w.userId._id) || w._id;
+      if (wid) wiseByUserId.set(wid, w);
+    }
+    for (const fs of fsStudents) {
+      if (fs.id === "__consultation__") continue;
+      if (fs.data.deleted) continue;
+      const fsSource = (fs.data.meta && fs.data.meta.source) || "";
+      if (fsSource !== "wise" && fsSource !== "wise-sync") continue;
+      if (seenFsIds.has(fs.id)) continue;
+
+      const wiseId = fs.data.wiseUserId || (fs.data.meta && fs.data.meta.wiseUserId);
+      const stillInWise = wiseId && wiseByUserId.has(wiseId);
+      const wiseRecord = stillInWise ? wiseByUserId.get(wiseId) : null;
+      const stillInSatClass = !!(wiseRecord && (wiseRecord.classes || []).some(function(c){ return /\bSAT\b/i.test(c.name || ""); }));
+
+      if (!stillInSatClass) {
+        plan.toTrash.push({
+          studentId: fs.id,
+          name: fs.data.name,
+          email: (fs.data.meta && fs.data.meta.email) || "",
+          reason: stillInWise ? "no-longer-in-SAT-class" : "not-found-in-wise",
+        });
+      }
+    }
+
+    const summary = {
+      totalWise: wiseStudents.length,
+      satCount,
+      nonSatCount,
+      toAddCount: plan.toAdd.length,
+      toUpdateCount: plan.toUpdate.length,
+      toTrashCount: plan.toTrash.length,
+      errorCount: plan.errors.length,
+    };
+
+    logger.info("syncStudentsFromWise: plan built", { dryRun, summary });
+
+    if (dryRun) {
+      return { summary, plan, committed: false, runAt: new Date().toISOString() };
+    }
+
+    let writes = 0;
+
+    for (const a of plan.toAdd) {
+      try {
+        const id = a.wiseUserId ? `wise_${a.wiseUserId}` : db.collection("students").doc().id;
+        await db.collection("students").doc(id).set(Object.assign({ id }, a.dataToWrite));
+        if (a.email) {
+          await db.collection("allowlist").doc(a.email).set({
+            email: a.email,
+            role: "student",
+            active: true,
+            studentIds: [id],
+            source: "wise-sync",
+            addedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+        writes++;
+      } catch (e) {
+        plan.errors.push({ kind: "add", name: a.name, message: e.message || String(e) });
+      }
+    }
+
+    for (const u of plan.toUpdate) {
+      try {
+        await db.collection("students").doc(u.studentId).update(u.updates);
+        if (u.email) {
+          await db.collection("allowlist").doc(u.email).set({
+            email: u.email,
+            role: "student",
+            active: true,
+            studentIds: admin.firestore.FieldValue.arrayUnion(u.studentId),
+            source: "wise-sync",
+          }, { merge: true });
+        }
+        writes++;
+      } catch (e) {
+        plan.errors.push({ kind: "update", studentId: u.studentId, message: e.message || String(e) });
+      }
+    }
+
+    for (const t of plan.toTrash) {
+      try {
+        await db.collection("students").doc(t.studentId).update({
+          deleted: true,
+          deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+          deletedReason: t.reason,
+        });
+        if (t.email) {
+          await db.collection("allowlist").doc(t.email).update({
+            active: false,
+            revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+            revokedReason: t.reason,
+          }).catch(function(){ /* allowlist entry may not exist */ });
+        }
+        writes++;
+      } catch (e) {
+        plan.errors.push({ kind: "trash", studentId: t.studentId, message: e.message || String(e) });
+      }
+    }
+
+    logger.info("syncStudentsFromWise: committed", { writes, summary });
+    return { summary, plan, committed: true, writes, runAt: new Date().toISOString() };
+  },
 );
