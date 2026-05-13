@@ -6875,6 +6875,17 @@ function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flag
     onFlagsChange(next);
   };
 
+  // Session 18C v10: per-question answer type. For "mixed" worksheets,
+  // catalogEntry.questionTypes[i] tells us whether THIS specific question
+  // is MC ("mc") or numeric ("fr"). When present we render the correct
+  // input only — no more "bubbles AND numeric for every question."
+  //
+  // Backfilled by scripts/backfill_question_types.mjs from
+  // extraction_output.json. Falls back to the both-shown mixed renderer
+  // when questionTypes isn't present (legacy data).
+  const perQuestionTypes = (catalogEntry && Array.isArray(catalogEntry.questionTypes))
+    ? catalogEntry.questionTypes
+    : null;
   const renderRow = (i) => {
     const value = answers[i] || "";
     if(format === "multiple-choice"){
@@ -6884,6 +6895,11 @@ function WorksheetBlock({worksheet, catalogEntry, answers, onAnswersChange, flag
       return renderFrRow(i, value, v => setAnswerAt(i, v), isLocked);
     }
     if(format === "mixed"){
+      // Prefer per-question type when available.
+      const t = perQuestionTypes ? perQuestionTypes[i] : null;
+      if(t === "mc")  return renderMcRow(i, value, v => setAnswerAt(i, v), isLocked);
+      if(t === "fr")  return renderFrRow(i, value, v => setAnswerAt(i, v), isLocked);
+      // No per-question type known — fall back to both-shown.
       return renderMixedRow(i, value, v => setAnswerAt(i, v), isLocked);
     }
     return null;

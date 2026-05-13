@@ -448,6 +448,10 @@ async function main() {
     const questionIds = r.tuples.map((t) => t.questionId);
     row.questionIds = questionIds;
     row.answerFormat = r.answerFormat;
+    // Session 18C v10: per-question answer type, parallel to questionIds.
+    // Lets the client render MC bubbles XOR numeric input on a per-question
+    // basis instead of showing both for every question on mixed worksheets.
+    row.questionTypes = r.tuples.map((t) => classifyAnswer(t.correctAnswer));
     catalogMutated++;
   }
   writeFileSync(CATALOG_PATH, JSON.stringify(catalog, null, 2) + trailing);

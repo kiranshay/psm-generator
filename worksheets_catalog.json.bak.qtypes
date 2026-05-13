@@ -21,19 +21,7 @@
       "5ff1ba73",
       "7254379e"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -56,18 +44,7 @@
       "73d457b6",
       "87023f34"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -91,19 +68,7 @@
       "24c1b7e4",
       "56f477fb"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -124,16 +89,7 @@
       "0b696a0c",
       "23a7038f"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -153,15 +109,7 @@
       "dc3ea63e",
       "f8befe75"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -181,15 +129,7 @@
       "d0fbf1ae",
       "14189fbb"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -210,16 +150,7 @@
       "d1b8a9ad",
       "4d3e3c52"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -239,15 +170,7 @@
       "c4d43991",
       "dbbbc5dd"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -266,14 +189,7 @@
       "5432d1de",
       "3882ddf6"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -295,17 +211,7 @@
       "a13c1c66",
       "f942646f"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -327,17 +233,7 @@
       "61228830",
       "0dccbf17"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -366,24 +262,7 @@
       "26ee16ba",
       "37a49687"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -409,21 +288,7 @@
       "a2b0fc3b",
       "2584bcfb"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -449,20 +314,7 @@
       "53c6c179"
     ],
     "answerFormat": "multiple-choice",
-    "stuTitle": "Command of Evidence-Hard (11Qs)",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "stuTitle": "Command of Evidence-Hard (11Qs)"
   },
   {
     "subject": "Reading & Writing",
@@ -496,29 +348,7 @@
       "63e7799d",
       "a44bbd6b"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -542,19 +372,7 @@
       "c106b9f7",
       "88bb0f6f"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -575,16 +393,7 @@
       "f52cc78c",
       "27d9bb69"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -604,15 +413,7 @@
       "e8fb0744",
       "3f753a8e"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -633,16 +434,7 @@
       "d2eb1df1",
       "637d0878"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -662,15 +454,7 @@
       "8b46bb51",
       "d3ca5d59"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -689,14 +473,7 @@
       "54804e10",
       "c14daa3c"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -718,17 +495,7 @@
       "3d658a5a",
       "e4f312c5"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -750,17 +517,7 @@
       "48e4021d",
       "0ed94d4c"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -782,17 +539,7 @@
       "c0e1b70a",
       "f631132b"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -811,14 +558,7 @@
       "aa5897b8",
       "b4887dae"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -839,16 +579,7 @@
       "56ec23a0",
       "5e732e67"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -869,16 +600,7 @@
       "5a4b147c",
       "9645f55e"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -896,13 +618,7 @@
       "f1c9d2c1",
       "eae66bf9"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -922,15 +638,7 @@
       "a87c3925",
       "f3c45b4f"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -952,17 +660,7 @@
       "2c50ed1a",
       "dc043599"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -982,15 +680,7 @@
       "e3484c07",
       "d7f31e68"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1010,15 +700,7 @@
       "eea351c4",
       "39d1a519"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1038,15 +720,7 @@
       "622a351d",
       "db3ad406"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1067,16 +741,7 @@
       "f4b63a04",
       "ff3865b3"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1097,16 +762,7 @@
       "8432a140",
       "bce57278"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1126,15 +782,7 @@
       "af88c47a",
       "fdd9a360"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1157,18 +805,7 @@
       "5b8b69a2",
       "10cd0327"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1189,16 +826,7 @@
       "0ee64efc",
       "63c73b50"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1217,14 +845,7 @@
       "11df9b99",
       "30438650"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1243,14 +864,7 @@
       "2df7b582",
       "00e0170f"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1272,17 +886,7 @@
       "176edca6",
       "c071eca2"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1302,15 +906,7 @@
       "588887b9",
       "4a90a978"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1327,12 +923,7 @@
       "c101fc44",
       "67614549"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1349,12 +940,7 @@
       "6d4b2e1e",
       "a14eef71"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1374,15 +960,7 @@
       "aab78b25",
       "26c8c88c"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1403,16 +981,7 @@
       "67667d72",
       "403d7bb5"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1432,15 +1001,7 @@
       "790fc366",
       "2bb7416a"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1463,18 +1024,7 @@
       "594b4a94",
       "fdb16e20"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Reading & Writing",
@@ -1499,19 +1049,7 @@
       "4c9a2aee"
     ],
     "answerFormat": "multiple-choice",
-    "stuTitle": "Form Structure Sense-Easy (10Qs)",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "stuTitle": "Form Structure Sense-Easy (10Qs)"
   },
   {
     "subject": "Reading & Writing",
@@ -1533,16 +1071,7 @@
       "db2e480a"
     ],
     "answerFormat": "multiple-choice",
-    "stuTitle": "Form Structure Sense-Medium (7Qs)",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "stuTitle": "Form Structure Sense-Medium (7Qs)"
   },
   {
     "subject": "Reading & Writing",
@@ -1564,16 +1093,7 @@
       "5b8f9cf2"
     ],
     "answerFormat": "multiple-choice",
-    "stuTitle": "Form Structure Sense-Hard (7Qs)",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "stuTitle": "Form Structure Sense-Hard (7Qs)"
   },
   {
     "subject": "Reading & Writing",
@@ -1595,16 +1115,7 @@
       "50801257"
     ],
     "answerFormat": "multiple-choice",
-    "stuTitle": "Form Structure Sense-Comp (7Qs 2,2,3)",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "stuTitle": "Form Structure Sense-Comp (7Qs 2,2,3)"
   },
   {
     "subject": "Reading & Writing",
@@ -2261,24 +1772,7 @@
       "b544a348",
       "686b7cad"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2307,24 +1801,7 @@
       "b8e73b5b",
       "03503d49"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2348,19 +1825,7 @@
       "93954cfa",
       "3d04de9c"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2384,19 +1849,7 @@
       "ce314070",
       "ce6b52d8"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "mc",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2415,14 +1868,7 @@
       "e6cb2402",
       "ae2287e2"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2451,24 +1897,7 @@
       "87071893",
       "b4553284"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2492,19 +1921,7 @@
       "0d391910",
       "3f5375d9"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2528,19 +1945,7 @@
       "5cf1bbc9",
       "3e9eaffc"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2559,14 +1964,7 @@
       "b3abf40f",
       "b988eeec"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2595,24 +1993,7 @@
       "b8cbe394",
       "12983c1e"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -2636,19 +2017,7 @@
       "8c98c834",
       "b2845d88"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -2669,16 +2038,7 @@
       "2e0290c3",
       "d62ad380"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2702,19 +2062,7 @@
       "cc7ffe02",
       "0b46bad5"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2743,24 +2091,7 @@
       "db0107df",
       "8368afd1"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2784,19 +2115,7 @@
       "9db5b5c1",
       "ca9bb527"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -2820,19 +2139,7 @@
       "74c03c21",
       "8a87c2c8"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -2853,16 +2160,7 @@
       "1362ccde",
       "52cb8ea4"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2891,24 +2189,7 @@
       "ffb371f5",
       "ece00725"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "fr",
-      "fr",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -2927,14 +2208,7 @@
       "ee439cff",
       "563407e5"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -2953,14 +2227,7 @@
       "968e9e51",
       "bf5f80c6"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -2979,14 +2246,7 @@
       "541bef2f",
       "6c71f3ec"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3010,19 +2270,7 @@
       "68f2cbaf",
       "df32b09c"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3051,24 +2299,7 @@
       "98f735f2",
       "eb268057"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3097,24 +2328,7 @@
       "0b3d25c5",
       "8838a672"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3143,24 +2357,7 @@
       "89fc23af",
       "4d037075"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3184,19 +2381,7 @@
       "e166aca6",
       "ad376f1a"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3220,19 +2405,7 @@
       "752055d1",
       "341ba5db"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -3256,19 +2429,7 @@
       "263f9937",
       "4dd4efcf"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3297,24 +2458,7 @@
       "f547a8b1",
       "9da41c80"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3338,19 +2482,7 @@
       "b8c4a1cd",
       "568aaf27"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3375,19 +2507,7 @@
       "6e02cd78"
     ],
     "answerFormat": "mixed",
-    "stuTitle": "NonLinEQs&SOEs - Medium (10Qs)",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr"
-    ]
+    "stuTitle": "NonLinEQs&SOEs - Medium (10Qs)"
   },
   {
     "subject": "Math",
@@ -3411,19 +2531,7 @@
       "d0a53ef5",
       "2c05d312"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3452,24 +2560,7 @@
       "a67a439d",
       "ce940f80"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "fr",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3493,19 +2584,7 @@
       "49efde89",
       "9ed9f54d"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -3529,19 +2608,7 @@
       "a520ba07",
       "5b6af6b1"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3565,19 +2632,7 @@
       "5355c0ef",
       "c81b6c57"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3606,24 +2661,7 @@
       "beb86a0c",
       "6e06a0a7"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3657,29 +2695,7 @@
       "99550621",
       "1c2f50a6"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3708,24 +2724,7 @@
       "e9f4521a",
       "9eb896c5"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "fr",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3754,24 +2753,7 @@
       "9ba3e283",
       "4a422e3e"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3795,19 +2777,7 @@
       "6310adbc",
       "2d16d62c"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3831,19 +2801,7 @@
       "e21d10a7",
       "8917ce38"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3860,12 +2818,7 @@
       "69f6717f",
       "3638f413"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3889,19 +2842,7 @@
       "e9841407",
       "fe1ec415"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3925,19 +2866,7 @@
       "3a6ed720",
       "9c44f828"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -3956,14 +2885,7 @@
       "7cab9fe1",
       "121dc44f"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -3982,14 +2904,7 @@
       "0231050d",
       "67c0200a"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4008,14 +2923,7 @@
       "0231050d",
       "67c0200a"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4039,19 +2947,7 @@
       "fa7a0164",
       "708590d7"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4070,14 +2966,7 @@
       "d0efc1dd",
       "07f2829b"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4096,14 +2985,7 @@
       "457d2f2c",
       "d65b9a87"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4132,24 +3014,7 @@
       "1e8ccffd",
       "bf47ad54"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4173,19 +3038,7 @@
       "c9dd92b1",
       "a6b2fcce"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -4204,14 +3057,7 @@
       "9a144a01",
       "03a16790"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4228,12 +3074,7 @@
       "1e1027a7",
       "7b52985c"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4257,19 +3098,7 @@
       "e821a26d",
       "79137c1b"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4288,14 +3117,7 @@
       "46545dd6",
       "16cea46c"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -4314,14 +3136,7 @@
       "0ae37ff3",
       "2df8f293"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4358,19 +3173,7 @@
       "6626cac3",
       "585de39a"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4394,19 +3197,7 @@
       "c7e73ece",
       "308084c5"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4430,19 +3221,7 @@
       "0108ac2d",
       "6a305cd0"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4461,14 +3240,7 @@
       "9bf4c545",
       "7d68096f"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -4487,14 +3259,7 @@
       "aa43b41f",
       "4a422e3e"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -4518,19 +3283,7 @@
       "02b02213",
       "165c30c4"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4559,24 +3312,7 @@
       "a2e76b60",
       "08b7a3f5"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4605,24 +3341,7 @@
       "17912810",
       "5b4757df"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "fr",
-      "fr",
-      "mc",
-      "fr",
-      "mc",
-      "fr",
-      "fr",
-      "fr",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4641,14 +3360,7 @@
       "0837c3b9",
       "575f1e12"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4667,14 +3379,7 @@
       "ec5d4823",
       "e336a1d2"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4693,14 +3398,7 @@
       "ba8ca563",
       "899c6042"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4729,24 +3427,7 @@
       "d2047497",
       "38517165"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4770,19 +3451,7 @@
       "3563d76d",
       "dfc420b2"
     ],
-    "answerFormat": "multiple-choice",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "multiple-choice"
   },
   {
     "subject": "Math",
@@ -4801,14 +3470,7 @@
       "933fee1a",
       "a4c05a1b"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4827,14 +3489,7 @@
       "947a3cde",
       "a0369739"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "fr",
-      "fr",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4858,19 +3513,7 @@
       "f9d40000",
       "0d3f51dc"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4907,19 +3550,7 @@
       "f811d345",
       "c9931030"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "fr",
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4943,19 +3574,7 @@
       "ae041e52",
       "c6dff223"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "mc",
-      "fr",
-      "mc",
-      "fr"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -4972,12 +3591,7 @@
       "74d8b897",
       "a0cacec1"
     ],
-    "answerFormat": "free-response",
-    "questionTypes": [
-      "fr",
-      "fr",
-      "fr"
-    ]
+    "answerFormat": "free-response"
   },
   {
     "subject": "Math",
@@ -5001,19 +3615,7 @@
       "ab176ad6",
       "3e577e4a"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "mc",
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "fr",
-      "mc",
-      "fr",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   },
   {
     "subject": "Math",
@@ -5032,13 +3634,6 @@
       "a0cacec1",
       "f1c1e971"
     ],
-    "answerFormat": "mixed",
-    "questionTypes": [
-      "fr",
-      "mc",
-      "mc",
-      "fr",
-      "mc"
-    ]
+    "answerFormat": "mixed"
   }
 ]
