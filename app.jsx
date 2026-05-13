@@ -5767,7 +5767,15 @@ function LatestPsmCard({student, studentId, submissions, canEdit}){
       const hasAnyAnswer = (perDoc.responses || []).some(r => (r.studentAnswer || "").trim() !== "");
       return hasAnyAnswer ? { kind: "in-progress" } : { kind: "not-started" };
     }
-    if(legacy && legacy.status === "submitted") return { kind: "submitted" };
+    // Session 18C v12: when legacy is submitted, only mark THIS worksheet
+    // as submitted if it had data in responses. Otherwise treat it as
+    // not-started — the student should be able to drill in and answer
+    // it via the per-WS path. Fixes the case where a buggy whole-PSM
+    // submit locked unfinished worksheets.
+    if(legacy && legacy.status === "submitted"){
+      const has = (legacy.responses || []).some(r => r && r.worksheetId === wsId && (r.studentAnswer || "").trim() !== "");
+      return has ? { kind: "submitted" } : { kind: "not-started" };
+    }
     if(legacy && Array.isArray(legacy.responses)){
       const has = legacy.responses.some(r => r && r.worksheetId === wsId && (r.studentAnswer || "").trim() !== "");
       return has ? { kind: "in-progress" } : { kind: "not-started" };
@@ -7216,12 +7224,14 @@ function AssignmentDetailView({student, studentId, assignment, submissions, canE
       const hasAnyAnswer = (perDoc.responses || []).some(r => (r.studentAnswer || "").trim() !== "");
       return hasAnyAnswer ? { kind: "in-progress" } : { kind: "not-started" };
     }
+    // Session 18C v12: when legacy is submitted, only mark THIS worksheet
+    // as submitted if it had data in responses. Otherwise treat it as
+    // not-started so the student can drill in and answer it via the
+    // per-WS path. Fixes the case where a buggy whole-PSM submit locked
+    // unfinished worksheets.
     if(legacy && legacy.status === "submitted"){
-      // Whole-PSM submission — every worksheet is "submitted" once the PSM
-      // is locked. Score is at the PSM level so we don't surface a per-WS
-      // score here; the student sees the overall grade banner inside the
-      // editor.
-      return { kind: "submitted" };
+      const has = (legacy.responses || []).some(r => r && r.worksheetId === wsId && (r.studentAnswer || "").trim() !== "");
+      return has ? { kind: "submitted" } : { kind: "not-started" };
     }
     if(legacy && Array.isArray(legacy.responses)){
       const has = legacy.responses.some(r => r && r.worksheetId === wsId && (r.studentAnswer || "").trim() !== "");
@@ -7328,7 +7338,302 @@ function AssignmentDetailView({student, studentId, assignment, submissions, canE
 // reach this in readOnly mode — never editable. Students in editable mode
 // autosave drafts to /students/{id}/submissions/{subId} on a 750ms debounce
 // and lock to "submitted" via a single write when they click Submit.
+// Session 18C v12: per-worksheet editor for focus-mode (drill-in from
+// LatestPsmCard or AssignmentDetailView). Writes ONLY to the per-WS doc
+// at students/{sid}/assignments/{aid}/worksheetSubmissions/{wsId} — does
+// NOT touch the legacy whole-PSM submissions/{subId} doc.
+//
+// Bug being fixed: previously SubmissionEditor in focus mode wrote to
+// the legacy submission and flipped its status to "submitted" when the
+// student hit Submit on a single worksheet. That marked the WHOLE PSM
+// as submitted, locking all other worksheets the student hadn't done
+// yet (E. Camerucci's session — submitted worksheet 1, the rest got
+// auto-locked).
+//
+// This component is intentionally self-contained — no useSubmissionDraft,
+// no writeDraftRef wiring through the larger SubmissionEditor. Each
+// worksheet drill-in opens a fresh per-WS doc lifecycle.
+function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, onClose}){
+  const {catalog, status: catalogStatus} = useWorksheetCatalog();
+  const [doc, setDoc] = useState(null);       // current per-WS doc snapshot
+  const [docLoaded, setDocLoaded] = useState(false);
+  const [answers, setAnswers] = useState([]); // [string]
+  const [flags, setFlags] = useState([]);     // ["star"|"question"|null]
+  const [localStatus, setLocalStatus] = useState("draft");
+  const [submittedAt, setSubmittedAt] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [savingExit, setSavingExit] = useState(false);
+  const dirtyRef = useRef(false);
+  const debounceRef = useRef(null);
+
+  const worksheet = useMemo(()=>
+    (assignment.worksheets || []).find(w => w && w.id === worksheetId),
+    [assignment.worksheets, worksheetId]);
+  const catalogEntry = useMemo(()=>{
+    if(catalogStatus !== "ready" || !catalog || !worksheet) return null;
+    const row = catalog.find(c => c.title === worksheet.title);
+    return (row && Array.isArray(row.questionIds) && row.questionIds.length > 0) ? row : null;
+  }, [catalogStatus, catalog, worksheet]);
+
+  // Subscribe to the per-WS doc; seed local state from it on every change
+  // (but skip seeding while user is typing — preserves in-progress edits).
+  useEffect(()=>{
+    const col = studentAssignmentWorksheetSubmissionsCollection(studentId, assignment.id);
+    if(!col){
+      setDocLoaded(true);
+      return;
+    }
+    const unsub = col.doc(worksheetId).onSnapshot((snap)=>{
+      if(snap.exists){
+        const data = snap.data() || {};
+        setDoc(data);
+        if(!dirtyRef.current){
+          const expected = catalogEntry?.questionIds?.length || 0;
+          const a = new Array(expected).fill("");
+          const f = new Array(expected).fill(null);
+          for(const r of (data.responses || [])){
+            const qi = Number(r.questionIndex);
+            if(Number.isFinite(qi) && qi >= 0 && qi < expected){
+              a[qi] = typeof r.studentAnswer === "string" ? r.studentAnswer : "";
+              f[qi] = r.flag || null;
+            }
+          }
+          setAnswers(a);
+          setFlags(f);
+          setLocalStatus(data.status || "draft");
+          setSubmittedAt(data.submittedAt || null);
+        }
+      } else if(!doc) {
+        // Brand-new — seed empty array based on catalog length.
+        const expected = catalogEntry?.questionIds?.length || 0;
+        if(!dirtyRef.current){
+          setAnswers(new Array(expected).fill(""));
+          setFlags(new Array(expected).fill(null));
+          setLocalStatus("draft");
+        }
+      }
+      setDocLoaded(true);
+    }, (err)=>{
+      console.warn("[SingleWorksheetEditor] snapshot error:", err);
+      setDocLoaded(true);
+    });
+    return ()=>unsub();
+  }, [studentId, assignment.id, worksheetId, catalogEntry]);
+
+  const isLocked = readOnly || localStatus === "submitted";
+
+  const writeDraft = async (overrideAnswers, overrideFlags) => {
+    if(isLocked) return;
+    const col = studentAssignmentWorksheetSubmissionsCollection(studentId, assignment.id);
+    if(!col) return;
+    const aArr = overrideAnswers || answers;
+    const fArr = overrideFlags  || flags;
+    const responses = aArr.map((v, i) => {
+      const obj = {
+        questionIndex: i,
+        studentAnswer: typeof v === "string" ? v : "",
+      };
+      if(fArr[i]) obj.flag = fArr[i];
+      return obj;
+    });
+    try{
+      const FV = firebase.firestore.FieldValue;
+      await col.doc(worksheetId).set({
+        worksheetId,
+        responses,
+        status: "draft",
+        updatedAt: FV.serverTimestamp(),
+        createdAt: FV.serverTimestamp(), // server merges; only sets first time
+      }, {merge: true});
+      dirtyRef.current = false;
+    } catch(e){
+      console.warn("[SingleWorksheetEditor] draft write failed:", e);
+    }
+  };
+
+  // Debounced autosave on answer/flag changes.
+  useEffect(()=>{
+    if(isLocked || !docLoaded) return;
+    if(!dirtyRef.current) return;
+    if(debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(()=> writeDraft(), 750);
+    return ()=>{ if(debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [answers, flags, isLocked, docLoaded]);
+
+  const setAnswerAt = (i, v) => {
+    if(isLocked) return;
+    dirtyRef.current = true;
+    setAnswers(prev => {
+      const next = prev.slice();
+      while(next.length <= i) next.push("");
+      next[i] = v;
+      return next;
+    });
+  };
+  const setFlagAt = (i, v) => {
+    if(isLocked) return;
+    dirtyRef.current = true;
+    setFlags(prev => {
+      const next = prev.slice();
+      while(next.length <= i) next.push(null);
+      next[i] = v;
+      return next;
+    });
+  };
+
+  const canSubmit = useMemo(()=>{
+    if(isLocked) return false;
+    // At least one answered slot (any non-empty).
+    return answers.some(a => typeof a === "string" && a.trim().length > 0);
+  }, [answers, isLocked]);
+
+  const onSubmit = async () => {
+    if(submitting || !canSubmit) return;
+    setSubmitting(true);
+    try{
+      if(debounceRef.current){ clearTimeout(debounceRef.current); debounceRef.current = null; }
+      await writeDraft(); // flush latest draft first
+      const col = studentAssignmentWorksheetSubmissionsCollection(studentId, assignment.id);
+      const FV = firebase.firestore.FieldValue;
+      await col.doc(worksheetId).update({
+        status: "submitted",
+        submittedAt: FV.serverTimestamp(),
+      });
+      setLocalStatus("submitted");
+      setSubmittedAt(new Date().toISOString());
+    } catch(e){
+      console.warn("[SingleWorksheetEditor] submit failed:", e);
+      alert("Couldn't submit. Try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const onSaveAndExit = async () => {
+    if(savingExit || isLocked) {
+      // If already submitted/readOnly, just exit.
+      onClose && onClose();
+      return;
+    }
+    setSavingExit(true);
+    try{
+      if(debounceRef.current){ clearTimeout(debounceRef.current); debounceRef.current = null; }
+      await writeDraft();
+    } finally {
+      setSavingExit(false);
+      onClose && onClose();
+    }
+  };
+
+  if(!worksheet){
+    return (
+      <div style={{...CARD, padding:"40px 24px", textAlign:"center"}}>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",color:"#8C2E2E",fontSize:18,marginBottom:14}}>
+          Worksheet not found.
+        </div>
+        <button onClick={onClose} style={SUBMIT_EDITOR_BACK_BTN}>← Back to PSM</button>
+      </div>
+    );
+  }
+  if(catalogStatus === "loading" || !docLoaded){
+    return (
+      <div style={{...CARD, padding:"40px 24px", textAlign:"center"}}>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",color:"#66708A"}}>Loading…</div>
+      </div>
+    );
+  }
+
+  // Banner: graded? submitted? draft?
+  let banner = null;
+  if(localStatus === "submitted"){
+    if(typeof doc?.scoreCorrect === "number"){
+      const correct = doc.scoreCorrect, total = doc.scoreTotal;
+      banner = {
+        text: `Submitted · Graded: ${correct} / ${total}`,
+        color: correct === total ? "#4C7A4C" : correct === 0 ? "#8C2E2E" : "#9A5B1F",
+        border: correct === total ? "rgba(76,122,76,.4)" : correct === 0 ? "rgba(140,46,46,.4)" : "rgba(154,91,31,.4)",
+      };
+    } else if(doc?.gradeSkipReason){
+      banner = { text: `Submitted · Not auto-graded (${doc.gradeSkipReason})`, color: "#9A5B1F", border: "rgba(154,91,31,.4)" };
+    } else {
+      banner = { text: "Submitted · Score pending…", color: "#66708A", border: "rgba(102,112,138,.35)" };
+    }
+  }
+
+  return (
+    <div style={{...CARD, padding:"24px 22px"}}>
+      <button onClick={onSaveAndExit} style={SUBMIT_EDITOR_BACK_BTN}>
+        ← {isLocked ? "Back to PSM" : (savingExit ? "Saving…" : "Save & back to PSM")}
+      </button>
+      <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:22,fontWeight:600,color:"#0F1A2E",marginTop:14,marginBottom:6,letterSpacing:-.2}}>
+        {assignment.date || assignment.dateAssigned || "Assignment"}
+      </div>
+      {banner && (
+        <div style={{
+          display:"inline-block",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,fontWeight:600,
+          color:banner.color,border:`1px solid ${banner.border}`,
+          padding:"6px 12px",borderRadius:4,textTransform:"uppercase",letterSpacing:.6,marginBottom:14,
+        }}>
+          {banner.text}
+        </div>
+      )}
+
+      {/* Review chip grid only after submission, like SubmissionEditor */}
+      {localStatus === "submitted" && Array.isArray(doc?.perQuestion) && doc.perQuestion.length > 0 && (
+        <SubmissionReviewGrid
+          worksheets={[worksheet]}
+          perQuestion={(doc.perQuestion || []).map(p => ({...p, worksheetId}))}
+          responses={(doc.responses || []).map(r => ({...r, worksheetId}))}
+        />
+      )}
+
+      <WorksheetBlock
+        worksheet={worksheet}
+        catalogEntry={catalogEntry}
+        answers={answers}
+        onAnswersChange={(next)=>{ dirtyRef.current = true; setAnswers(next); }}
+        flags={flags}
+        onFlagsChange={(next)=>{ dirtyRef.current = true; setFlags(next); }}
+        isLocked={isLocked}
+        indexLabel={`Worksheet · ${worksheet.title || ""}`}
+        results={localStatus === "submitted" ? (() => {
+          const out = [];
+          for(const pq of (doc?.perQuestion || [])){
+            if(pq && typeof pq.questionIndex === "number") out[pq.questionIndex] = pq;
+          }
+          return out;
+        })() : null}
+        showResults={localStatus === "submitted"}
+      />
+
+      {!isLocked && (
+        <div style={{marginTop:24, display:"flex", justifyContent:"flex-end", gap:10, flexWrap:"wrap"}}>
+          <button onClick={onSaveAndExit} disabled={savingExit} style={{...mkBtn("transparent","#0F1A2E"),border:"1px solid rgba(15,26,46,.22)",padding:"10px 18px",fontSize:12,letterSpacing:.4,textTransform:"uppercase",fontWeight:600}}>
+            {savingExit ? "Saving…" : "Save & exit"}
+          </button>
+          <button onClick={onSubmit} disabled={!canSubmit || submitting} style={canSubmit ? SUBMIT_BTN_STYLE : SUBMIT_BTN_STYLE_DISABLED}>
+            {submitting ? "Submitting…" : "Submit worksheet"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SubmissionEditor({studentId, assignment, readOnly, onClose, focusWorksheetId}){
+  // Session 18C v12: focus mode delegates to a separate per-WS editor
+  // that writes to worksheetSubmissions/{wsId} ONLY (never touches the
+  // legacy whole-PSM submission). Fixes the bug where submitting one
+  // worksheet locked all the others.
+  if(focusWorksheetId){
+    return <SingleWorksheetEditor
+      studentId={studentId}
+      assignment={assignment}
+      worksheetId={focusWorksheetId}
+      readOnly={readOnly}
+      onClose={onClose}
+    />;
+  }
   const {status, submission} = useSubmissionDraft(studentId, assignment.id);
   const {status: catalogStatus, catalog} = useWorksheetCatalog();
 
