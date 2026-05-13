@@ -2684,6 +2684,24 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
   // `{summary, plan}` = preview returned, awaiting confirm.
   // `{committing:true, summary, plan}` = user confirmed, executing.
   const[wiseSync,setWiseSync]=useState(null);
+  // Session 18C v11: SAT-student broadcast modal state. `null`/false =
+  // closed. `true` = open. The default message tells students to use
+  // the central portal URL going forward and explains old deep-links
+  // were retired.
+  const[broadcastOpen,setBroadcastOpen]=useState(false);
+  const[broadcastTitle,setBroadcastTitle]=useState("Portal sign-in update");
+  const[broadcastBody,setBroadcastBody]=useState(
+    "Hi! Quick update on how to access your PSM portal going forward:\n\n"
+    + "• Please use this link to sign in: https://portal.affordabletutoringsolutions.org/\n"
+    + "• Older personal portal links sent in past PSM posts may not work — "
+    + "use the link above instead.\n\n"
+    + "Once signed in, your latest PSM appears at the top with each "
+    + "worksheet listed individually. Click a worksheet to answer it, "
+    + "submit, then move on to the next.\n\n"
+    + "Reach out to your tutor with any sign-in issues."
+  );
+  const[broadcastBusy,setBroadcastBusy]=useState(false);
+  const[broadcastResult,setBroadcastResult]=useState(null);
   // Global search (⌘K / Ctrl+K)
   const[searchOpen,setSearchOpen]=useState(false);
   const[searchQuery,setSearchQuery]=useState("");
@@ -3948,6 +3966,91 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
         );
       })()}
 
+      {/* Session 18C v11: Broadcast-to-SAT-students modal */}
+      {broadcastOpen && (
+        <div onClick={()=> !broadcastBusy && setBroadcastOpen(false)} style={{position:"fixed",inset:0,background:"rgba(15,26,46,.55)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center",padding:"40px 24px"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"var(--card)",border:"1px solid var(--rule)",borderRadius:14,boxShadow:"var(--shadow-lg)",maxWidth:680,width:"100%",maxHeight:"88vh",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
+            <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,var(--brand) 0,var(--brand) 72px,transparent 72px)"}}/>
+            <div style={{padding:"28px 32px 18px",borderBottom:"1px solid var(--rule)"}}>
+              <div style={{fontFamily:"var(--font-body)",fontSize:10,fontWeight:600,letterSpacing:"0.18em",textTransform:"uppercase",color:"var(--ink-mute)",marginBottom:6}}>Wise · Broadcast</div>
+              <h2 style={{fontFamily:"var(--font-display)",fontVariationSettings:"'opsz' 144, 'SOFT' 20",fontWeight:600,fontSize:26,letterSpacing:"-0.02em",margin:"0 0 6px",lineHeight:1.1}}>
+                Post a Wise discussion to every active SAT student
+              </h2>
+              <div style={{fontSize:13,color:"var(--ink-soft)",lineHeight:1.55,maxWidth:560}}>
+                Discussion will be posted to each student's 1:1 SAT class in Wise (notifies them). Recipients: every active student with <code style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,background:"rgba(15,26,46,.05)",padding:"1px 4px",borderRadius:2}}>meta.source ∈ wise / wise-sync</code> and a cached class id.
+              </div>
+            </div>
+            {!broadcastResult ? (
+              <>
+                <div style={{padding:"18px 32px 8px",flex:1,overflowY:"auto"}}>
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,letterSpacing:1.2,color:"#66708A",textTransform:"uppercase",marginBottom:6}}>Discussion title</div>
+                    <input value={broadcastTitle} onChange={e=>setBroadcastTitle(e.target.value)} disabled={broadcastBusy} style={{width:"100%",padding:"8px 12px",fontSize:13,fontFamily:"inherit",border:"1px solid rgba(15,26,46,.18)",borderRadius:4,boxSizing:"border-box"}}/>
+                  </div>
+                  <div>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,letterSpacing:1.2,color:"#66708A",textTransform:"uppercase",marginBottom:6}}>Body</div>
+                    <textarea value={broadcastBody} onChange={e=>setBroadcastBody(e.target.value)} disabled={broadcastBusy} rows={10} style={{width:"100%",padding:"10px 12px",fontSize:13,fontFamily:"inherit",border:"1px solid rgba(15,26,46,.18)",borderRadius:4,boxSizing:"border-box",resize:"vertical",lineHeight:1.55}}/>
+                  </div>
+                </div>
+                <div style={{padding:"14px 32px",borderTop:"1px solid var(--rule)",display:"flex",justifyContent:"flex-end",gap:10}}>
+                  <button onClick={()=>setBroadcastOpen(false)} disabled={broadcastBusy} style={{...mkBtn("transparent","var(--ink-soft)"),border:"1px solid var(--rule)",padding:"8px 16px",fontSize:12}}>
+                    Cancel
+                  </button>
+                  <button onClick={async()=>{
+                    if(!window.firebase || !window.firebase.app){ alert("Firebase not loaded"); return; }
+                    if(!broadcastTitle.trim() || !broadcastBody.trim()){ alert("Title and body are required."); return; }
+                    setBroadcastBusy(true);
+                    try{
+                      // First, dry-run to count recipients.
+                      const fn = window.firebase.app().functions("us-central1").httpsCallable("broadcastToSatStudents");
+                      const preview = await fn({dryRun:true, title: broadcastTitle, body: broadcastBody});
+                      const count = preview.data?.summary?.recipientCount || 0;
+                      if(!window.confirm(`This will post the discussion to ${count} SAT student${count===1?"":"s"}. Proceed?`)){
+                        setBroadcastBusy(false);
+                        return;
+                      }
+                      const res = await fn({dryRun:false, title: broadcastTitle, body: broadcastBody});
+                      setBroadcastResult(res.data || {error:"empty response"});
+                      showToast(`Broadcast complete: ${res.data?.summary?.posted||0} posted, ${res.data?.summary?.failed||0} failed`);
+                    }catch(e){
+                      console.warn("[broadcast] failed:", e);
+                      alert("Broadcast failed: " + (e.message||e));
+                    } finally {
+                      setBroadcastBusy(false);
+                    }
+                  }} disabled={broadcastBusy} style={{...mkBtn(broadcastBusy?"rgba(15,26,46,.2)":"#003258","#FAF7F2"),padding:"8px 18px",fontSize:12,fontWeight:600,letterSpacing:.4,textTransform:"uppercase"}}>
+                    {broadcastBusy ? "Sending…" : "Preview & send"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{padding:"18px 32px 8px",flex:1,overflowY:"auto"}}>
+                  <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:14}}>
+                    <span style={{...mkPill("transparent","#4C7A4C"),border:"1px solid rgba(76,122,76,.4)",fontWeight:600}}>✓ {broadcastResult.summary?.posted||0} posted</span>
+                    <span style={{...mkPill("transparent","#8C2E2E"),border:"1px solid rgba(140,46,46,.4)",fontWeight:600}}>✗ {broadcastResult.summary?.failed||0} failed</span>
+                  </div>
+                  {Array.isArray(broadcastResult.results) && (
+                    <div style={{maxHeight:240,overflowY:"auto",fontSize:12,fontFamily:"'IBM Plex Mono',monospace"}}>
+                      {broadcastResult.results.map((r,i)=>(
+                        <div key={i} style={{padding:"4px 8px",borderBottom:"1px solid rgba(15,26,46,.06)",color:r.status==="posted"?"#4C7A4C":"#8C2E2E"}}>
+                          {r.status==="posted"?"✓":"✗"} {r.name} · {r.email}{r.error?` · ${r.error}`:""}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div style={{padding:"14px 32px",borderTop:"1px solid var(--rule)",display:"flex",justifyContent:"flex-end"}}>
+                  <button onClick={()=>{ setBroadcastOpen(false); setBroadcastResult(null); }} style={{...mkBtn("transparent","var(--ink)"),border:"1px solid var(--rule)",padding:"8px 18px",fontSize:12}}>
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Session 18C: Wise API sync preview modal */}
       {wiseSync && (()=>{
         if(wiseSync.loading){
@@ -4166,6 +4269,13 @@ function AppInner({authUser, onSignOut, currentUserEntry}){
             }
           }} title="Pull all SAT students from Wise via API. Adds new ones, updates wise-metadata on existing (preserves all your scores/assignments), trashes ones no longer in a SAT class. Admin-only. Preview first." style={{cursor:"pointer",background:"none",border:"none",font:"inherit",color:"inherit",padding:0,fontWeight:600}}>
             Sync from Wise API
+          </button>
+          {/* Session 18C v11: broadcast an announcement to every active
+              SAT student's wise class. Admin-only. Defaults to the
+              "use the central portal link" message so old deep-links
+              can be retired gracefully. */}
+          <button onClick={()=> setBroadcastOpen(true)} title="Post a Wise discussion to every active SAT student. Useful for portal/url announcements. Admin-only." style={{cursor:"pointer",background:"none",border:"none",font:"inherit",color:"inherit",padding:0,fontWeight:600}}>
+            Broadcast to SAT students
           </button>
           <div data-psm-user title={authUser.email} style={{
             display:"inline-flex",alignItems:"center",gap:8,

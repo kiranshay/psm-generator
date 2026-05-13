@@ -1021,3 +1021,104 @@ exports.syncStudentsFromWise = onCall(
     return { summary, plan, committed: true, writes, runAt: new Date().toISOString() };
   },
 );
+
+// ── broadcastToSatStudents (Session 18C v11) ──────────────────────────────
+//
+// Admin-only. Posts a Wise discussion to every active student's class
+// that came from the SAT-class sync. Used for ad-hoc announcements
+// like "use the central portal URL going forward" without having to
+// click into each student individually.
+//
+// Two-phase like syncStudentsFromWise:
+//   dryRun: true  → returns the recipient plan {recipients, errors}
+//   dryRun: false → executes, posts the discussion to each, returns
+//                   per-recipient outcomes.
+//
+// Caller payload:
+//   { dryRun: boolean, title: string, body: string }
+//
+// SAT-student detection: meta.source ∈ {"wise","wise-sync"} AND has a
+// cached wiseClassId AND not soft-deleted.
+
+exports.broadcastToSatStudents = onCall(
+  {
+    region: "us-central1",
+    secrets: ALL_WISE_SECRETS,
+    maxInstances: 1,
+    timeoutSeconds: 540,
+  },
+  async (request) => {
+    await verifyCallerIsAdmin(request);
+    const data = request.data || {};
+    const dryRun = !!data.dryRun;
+    const title = (data.title || "").trim();
+    const body = (data.body || "").trim();
+
+    if (!title) throw new HttpsError("invalid-argument", "title is required");
+    if (!body) throw new HttpsError("invalid-argument", "body is required");
+
+    const cfg = wiseConfig();
+    const db = admin.firestore();
+
+    // Pull every student that came from wise + isn't trashed + has a
+    // cached class id.
+    const snap = await db.collection("students").get();
+    const recipients = [];
+    snap.forEach(d => {
+      const data = d.data() || {};
+      if (data.deleted) return;
+      if (d.id === "__consultation__") return;
+      const src = (data.meta && data.meta.source) || "";
+      if (src !== "wise" && src !== "wise-sync") return;
+      const classId = data.wiseClassId || (data.meta && data.meta.wiseClasses && data.meta.wiseClasses[0] && data.meta.wiseClasses[0].id);
+      if (!classId) return;
+      recipients.push({
+        studentId: d.id,
+        name: data.name || "",
+        email: (data.meta && data.meta.email) || "",
+        classId,
+      });
+    });
+
+    logger.info("broadcastToSatStudents: plan", {
+      dryRun, count: recipients.length, title,
+    });
+
+    if (dryRun) {
+      return {
+        summary: { recipientCount: recipients.length },
+        recipients: recipients.map(r => ({ name: r.name, email: r.email, classId: r.classId })),
+        runAt: new Date().toISOString(),
+      };
+    }
+
+    // Execute — post to each class. Track per-recipient outcomes.
+    const results = [];
+    let posted = 0, failed = 0;
+    for (const r of recipients) {
+      try {
+        await createDiscussion(cfg, r.classId, { title, description: body });
+        posted++;
+        results.push({ name: r.name, email: r.email, status: "posted" });
+      } catch (e) {
+        failed++;
+        results.push({
+          name: r.name,
+          email: r.email,
+          status: "failed",
+          error: (e && e.message) || String(e),
+        });
+        logger.warn("broadcastToSatStudents: post failed", {
+          name: r.name, error: e && e.message,
+        });
+      }
+    }
+
+    logger.info("broadcastToSatStudents: done", { posted, failed });
+    return {
+      summary: { recipientCount: recipients.length, posted, failed },
+      results,
+      runAt: new Date().toISOString(),
+    };
+  },
+);
