@@ -302,12 +302,19 @@ async function resolveRecipient(cfg, studentDoc) {
 // Returns: { ok: true, mode, classId, deepLink }
 
 function buildPsmDescription(deepLink, worksheets, practiceExams) {
+  // Session 18C v9: per Aidan, the portal link in the Wise discussion
+  // is now generic (the portal base URL). The previous per-assignment
+  // deep-link (?a=<id>&s=<id>) was unreliable across mail clients +
+  // some students hit blank pages on the deep route. Generic link
+  // drops them on the portal landing page, where their most-recent
+  // assignment auto-surfaces in a "Latest PSM" card.
+  const portalUrl = (deepLink || "").split("?")[0] || deepLink;
   const lines = [
     `The recording of today's session has been posted on Wise. Please complete the following worksheets using the PSM instructions posted in the PSMs modules.`,
     ``,
     `<b>Important Reminder:</b> Please book your next session in advance, timing it for when you expect to have these PSMs completed. After completing the worksheets, check and mark your work according to the PSM instructions, then upload your marked work as a comment to this PSMs assignment.`,
     ``,
-    `<b>Portal Link:</b> ${deepLink}`,
+    `<b>Portal Link:</b> ${portalUrl}`,
   ];
 
   if (worksheets.length > 0) {

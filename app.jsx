@@ -5556,6 +5556,20 @@ function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot, im
 
   return (
     <PortalShell studentName={student.name} studentGrade={student.grade} onSignOut={onSignOut} currentUserEntry={currentUserEntry} switcherSlot={switcherSlot} impersonating={impersonating} studentEmail={(student.meta && student.meta.email) || (currentUserEntry && currentUserEntry.email) || ""}>
+      {/* Session 18C v9: latest-PSM card with directly-clickable
+          worksheets. Auto-renders below the logins on every tab so
+          students don't have to hunt through assignment history to
+          find what was just assigned. Per Aidan: 'They should be able
+          to answer each worksheet individually not just one answer
+          button' — each worksheet here opens its own SubmissionEditor. */}
+      {!impersonating && (
+        <LatestPsmCard
+          student={student}
+          studentId={studentId}
+          submissions={portalSubmissions}
+          canEdit={(currentUserEntry?.role) === "student"}
+        />
+      )}
       <div style={{display:"flex",gap:28,marginBottom:24,borderBottom:"1px solid rgba(15,26,46,.12)",flexWrap:"wrap"}}>
         {[
           {id:"tracking", label:"Score Tracking"},
@@ -5582,6 +5596,166 @@ function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot, im
       {tab==="history"  && <PortalHistoryTab student={student} studentId={studentId} currentUserEntry={currentUserEntry} deepLinkAssignmentId={deepLinkAssignmentId} submissions={portalSubmissions}/>}
       {tab==="trends"   && <PortalTrendsTab student={student}/>}
     </PortalShell>
+  );
+}
+
+// Session 18C v9: latest-PSM landing card. Shows the most recent
+// non-deleted assignment as soon as the student lands. Each worksheet
+// is a clickable button that opens the SubmissionEditor in single-WS
+// mode (focusWorksheetId), so the student doesn't see one giant Answer
+// button but instead picks each worksheet to do one at a time.
+//
+// "Most recent" = the assignment with the latest `date` (YYYY-MM-DD),
+// soft-deleted ones filtered out. If there are no assignments yet,
+// the card doesn't render.
+function LatestPsmCard({student, studentId, submissions, canEdit}){
+  const [openWorksheetId, setOpenWorksheetId] = useState(null);
+  // Track per-WS status from both legacy submissions and per-worksheet
+  // docs. useWorksheetSubmissions returns {byWorksheet} keyed by wsId.
+  // For the latest PSM we resolve its id first, then subscribe to
+  // that subcollection.
+  const latest = useMemo(()=>{
+    const list = (student.assignments||[]).filter(a => !a.deleted);
+    if(list.length === 0) return null;
+    // sort by date desc, then by array-index as a tiebreaker (newer
+    // additions appended later)
+    const sorted = [...list].sort((a,b)=>{
+      const da = (a.date || a.dateAssigned || "");
+      const db = (b.date || b.dateAssigned || "");
+      if(da !== db) return db.localeCompare(da);
+      return 0;
+    });
+    return sorted[0] || null;
+  }, [student.assignments]);
+
+  // Hooks always run; subscribe with the latest PSM id (or null).
+  const perWs = useWorksheetSubmissions(studentId, latest && latest.id);
+  const legacy = (submissions || []).find(s => s && s.assignmentId === (latest && latest.id)) || null;
+
+  if(!latest) return null;
+  if(openWorksheetId){
+    return (
+      <SubmissionEditor
+        studentId={studentId}
+        assignment={latest}
+        focusWorksheetId={openWorksheetId}
+        readOnly={!canEdit}
+        onClose={()=>setOpenWorksheetId(null)}
+      />
+    );
+  }
+
+  const worksheets = (latest.worksheets || []).filter(w => !w.deleted);
+  const welledDomain = (latest.welledDomain || []).filter(w => !w.deleted);
+  const practiceExams = (latest.practiceExams || []).filter(e => !e.deleted);
+
+  function statusFor(wsId){
+    const perDoc = perWs.byWorksheet[wsId];
+    if(perDoc){
+      if(typeof perDoc.scoreCorrect === "number") return { kind: "graded", score: `${perDoc.scoreCorrect} / ${perDoc.scoreTotal}` };
+      if(perDoc.status === "submitted") return { kind: "submitted" };
+      const hasAnyAnswer = (perDoc.responses || []).some(r => (r.studentAnswer || "").trim() !== "");
+      return hasAnyAnswer ? { kind: "in-progress" } : { kind: "not-started" };
+    }
+    if(legacy && legacy.status === "submitted") return { kind: "submitted" };
+    if(legacy && Array.isArray(legacy.responses)){
+      const has = legacy.responses.some(r => r && r.worksheetId === wsId && (r.studentAnswer || "").trim() !== "");
+      return has ? { kind: "in-progress" } : { kind: "not-started" };
+    }
+    return { kind: "not-started" };
+  }
+
+  const STATUS_STYLE = {
+    "not-started":  { bg: "transparent",  fg: "#66708A",  border: "rgba(15,26,46,.18)", label: "Not started"  },
+    "in-progress":  { bg: "#FFF1DE",      fg: "#9A5B1F",  border: "rgba(154,91,31,.4)", label: "In progress"  },
+    "submitted":    { bg: "#E9F0F6",      fg: "#003258",  border: "rgba(0,50,88,.35)",  label: "Submitted"    },
+    "graded":       { bg: "#E4F0E2",      fg: "#4C7A4C",  border: "rgba(76,122,76,.4)", label: "Graded"       },
+  };
+  const statuses = worksheets.map(w => statusFor(w.id).kind);
+  const doneCount = statuses.filter(k => k === "submitted" || k === "graded").length;
+
+  return (
+    <div style={{...CARD, padding:"22px 24px", marginBottom:24, borderLeft:"3px solid #9A5B1F"}}>
+      <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:10,gap:12,flexWrap:"wrap"}}>
+        <div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:1.4,color:"#9A5B1F",textTransform:"uppercase",marginBottom:4}}>
+            Latest PSM
+          </div>
+          <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:22,fontWeight:600,color:"#0F1A2E",letterSpacing:-.2}}>
+            {latest.date || latest.dateAssigned || "This week's assignment"}
+          </div>
+        </div>
+        {worksheets.length > 0 && (
+          <span style={{...mkPill("transparent","#003258"),border:"1px solid rgba(0,50,88,.28)"}}>
+            {doneCount} / {worksheets.length} done
+          </span>
+        )}
+      </div>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",letterSpacing:.5,textTransform:"uppercase",marginBottom:16}}>
+        Click a worksheet to answer it. One at a time — submit, then pick the next.
+      </div>
+
+      {worksheets.length === 0 ? (
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",fontSize:13,color:"#66708A"}}>
+          No portal worksheets in this PSM — see WellEd / BlueBook items below.
+        </div>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {worksheets.map(w => {
+            const st = statusFor(w.id);
+            const sty = STATUS_STYLE[st.kind] || STATUS_STYLE["not-started"];
+            const isDone = st.kind === "submitted" || st.kind === "graded";
+            const ctaLabel = isDone ? "Review →" : "Answer →";
+            return (
+              <button
+                key={w.id}
+                onClick={()=> canEdit && setOpenWorksheetId(w.id)}
+                disabled={!canEdit && !isDone}
+                style={{
+                  textAlign:"left", padding:"14px 16px", borderRadius:6,
+                  border:`1px solid ${sty.border}`, background:"#fff",
+                  cursor: canEdit ? "pointer" : "default",
+                  display:"flex", alignItems:"center", gap:14, flexWrap:"wrap",
+                  fontFamily:"inherit",
+                }}
+              >
+                <div style={{flex:"1 1 200px",minWidth:0}}>
+                  <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:15,color:"#0F1A2E",fontWeight:600,letterSpacing:-.1}}>
+                    {w.title || `${w.domain||""} — ${w.difficulty||""}`}
+                  </div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",marginTop:2}}>
+                    {w.subject||""}{w.domain?` · ${w.domain}`:""}{w.difficulty?` · ${w.difficulty}`:""}{w.evenOdd?` · ${w.evenOdd}`:""}
+                  </div>
+                </div>
+                <span style={{
+                  fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,
+                  letterSpacing:.6,textTransform:"uppercase",
+                  padding:"4px 10px",borderRadius:3,
+                  background:sty.bg, color:sty.fg, border:`1px solid ${sty.border}`,
+                  flexShrink:0,
+                }}>
+                  {st.kind === "graded" ? `Graded · ${st.score}` : sty.label}
+                </span>
+                <span style={{
+                  fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#0F1A2E",
+                  letterSpacing:.6,textTransform:"uppercase",fontWeight:600,flexShrink:0,
+                }}>{ctaLabel}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {(welledDomain.length > 0 || practiceExams.length > 0) && (
+        <div style={{marginTop:14,padding:"10px 12px",background:"#FAF7F2",borderRadius:6,border:"1px solid rgba(15,26,46,.08)",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",lineHeight:1.6}}>
+          This PSM also includes{" "}
+          {welledDomain.length > 0 && <span><strong>{welledDomain.length}</strong> WellEd domain practice{welledDomain.length===1?"":"s"}</span>}
+          {welledDomain.length > 0 && practiceExams.length > 0 && " and "}
+          {practiceExams.length > 0 && <span><strong>{practiceExams.length}</strong> practice exam{practiceExams.length===1?"":"s"}</span>}
+          {". Do those on WellEd / BlueBook (links above)."}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -6155,17 +6329,47 @@ function PortalHistoryTab({student, studentId, currentUserEntry, deepLinkAssignm
             </div>
 
             {worksheets.length>0 && (
-              <div style={{marginBottom:welledDomain.length||practiceExams.length?14:0}}>
-                {worksheets.map(w=>(
-                  <div key={w.id} style={{padding:"8px 0",borderBottom:"1px solid rgba(15,26,46,.06)"}}>
-                    <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#0F1A2E"}}>
-                      {w.title || `${w.domain||""} — ${w.difficulty||""}`}
-                    </div>
-                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",marginTop:2}}>
-                      {w.subject||""} {w.domain?`· ${w.domain}`:""} {w.difficulty?`· ${w.difficulty}`:""}
-                    </div>
-                  </div>
-                ))}
+              <div style={{marginBottom:welledDomain.length||practiceExams.length?14:0, display:"flex", flexDirection:"column", gap:6}}>
+                {/* Session 18C v9: each worksheet inline-clickable. Skips
+                    the old AssignmentDetailView intermediate page —
+                    student picks a worksheet and goes straight to the
+                    SubmissionEditor in single-WS mode. */}
+                {worksheets.map(w=>{
+                  return (
+                    <button
+                      key={w.id}
+                      onClick={()=>{ if(canEdit){ setOpenAssignmentId(asg.id); setOpenWorksheetId(w.id); } }}
+                      disabled={!canEdit}
+                      style={{
+                        textAlign:"left",
+                        background:"#fff",
+                        border:"1px solid rgba(15,26,46,.12)",
+                        borderRadius:6,
+                        padding:"10px 12px",
+                        cursor: canEdit ? "pointer" : "default",
+                        fontFamily:"inherit",
+                        display:"flex",
+                        alignItems:"center",
+                        gap:10,
+                        flexWrap:"wrap",
+                      }}
+                    >
+                      <div style={{flex:"1 1 200px",minWidth:0}}>
+                        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:14,color:"#0F1A2E",fontWeight:600,letterSpacing:-.1}}>
+                          {w.title || `${w.domain||""} — ${w.difficulty||""}`}
+                        </div>
+                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",marginTop:2}}>
+                          {w.subject||""} {w.domain?`· ${w.domain}`:""} {w.difficulty?`· ${w.difficulty}`:""}{w.evenOdd?` · ${w.evenOdd}`:""}
+                        </div>
+                      </div>
+                      {canEdit && (
+                        <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:"#9A5B1F",letterSpacing:.6,textTransform:"uppercase"}}>
+                          Answer →
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -6188,21 +6392,9 @@ function PortalHistoryTab({student, studentId, currentUserEntry, deepLinkAssignm
                 ))}
               </div>
             )}
-            {canEdit && (
-              <div style={{marginTop:14, paddingTop:12, borderTop:"1px solid rgba(15,26,46,.08)", display:"flex", justifyContent:"flex-end"}}>
-                <button
-                  onClick={()=>setOpenAssignmentId(asg.id)}
-                  style={{
-                    border:`1px solid ${isDone ? "rgba(15,26,46,.22)" : "rgba(154,91,31,.4)"}`,
-                    background:"#fff",
-                    color: isDone ? "#0F1A2E" : "#9A5B1F",
-                    padding:"8px 16px", borderRadius:6, cursor:"pointer",
-                    fontFamily:"'IBM Plex Mono',monospace", fontSize:10, letterSpacing:1,
-                    textTransform:"uppercase",
-                  }}
-                >{isDone ? "Review →" : "Answer →"}</button>
-              </div>
-            )}
+            {/* Session 18C v9: single Answer button removed — worksheets
+                are now individually clickable above. Parents still get
+                a "View" button to open AssignmentDetailView. */}
             {!canEdit && role === "parent" && (
               <div style={{marginTop:14, paddingTop:12, borderTop:"1px solid rgba(15,26,46,.08)", display:"flex", justifyContent:"flex-end"}}>
                 <button
