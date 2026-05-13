@@ -7083,6 +7083,121 @@ function FlagBadge({flag}){
 // Option C (Kiran directive): reveals the stored correct answer next to
 // every graded question for pedagogical feedback. Skipped questions show
 // only the "—" glyph with no reveal.
+// Session 18C v6: compact summary review chip grid. Same visual
+// vocabulary as the tutor's TutorSubmissionRow per-question chips:
+// green=correct, red=wrong-with-correct-answer-in-parens, amber=skipped,
+// flags overlaid as ★ / ?. Used at the top of student's locked
+// SubmissionEditor so they can scan the whole PSM's results in one
+// glance before drilling into per-question detail rows.
+function SubmissionReviewGrid({worksheets, perQuestion, responses}){
+  // Index perQuestion + responses for fast lookup by (worksheetId, idx).
+  const pqByKey = new Map();
+  for(const pq of (perQuestion || [])){
+    if(pq && pq.worksheetId !== undefined && pq.questionIndex !== undefined){
+      pqByKey.set(`${pq.worksheetId}|${pq.questionIndex}`, pq);
+    }
+  }
+  const respByKey = new Map();
+  for(const r of (responses || [])){
+    if(r && r.worksheetId !== undefined && r.questionIndex !== undefined){
+      respByKey.set(`${r.worksheetId}|${r.questionIndex}`, r);
+    }
+  }
+  // Group by worksheet for the section headers.
+  const wsList = (worksheets || []).filter(w => w && w.id);
+  if(wsList.length === 0) return null;
+  return (
+    <div style={{margin:"4px 0 18px",display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:1.4,color:"#66708A",textTransform:"uppercase"}}>
+        Review Summary
+      </div>
+      {wsList.map((w, wIdx) => {
+        // Gather all (responses + perQuestion entries) for this worksheet.
+        // We render slots 0..max(seen index) so blanks at the end of a
+        // worksheet still appear.
+        const slots = [];
+        for(let i = 0; i < 100; i++){
+          const r = respByKey.get(`${w.id}|${i}`);
+          const pq = pqByKey.get(`${w.id}|${i}`);
+          if(r === undefined && pq === undefined) {
+            // Heuristic: stop walking once we've passed the last response/result.
+            // Look ahead 5 — if none found, break.
+            let any = false;
+            for(let k = 1; k <= 5; k++){
+              if(respByKey.has(`${w.id}|${i+k}`) || pqByKey.has(`${w.id}|${i+k}`)){ any = true; break; }
+            }
+            if(!any) break;
+          }
+          slots.push({i, r, pq});
+        }
+        if(slots.length === 0) return null;
+        const ok = slots.filter(s => s.pq && s.pq.correct === true).length;
+        const wrong = slots.filter(s => s.pq && s.pq.correct === false).length;
+        const ungraded = slots.length - ok - wrong;
+        const hasAnyFlag = slots.some(s => s.r && s.r.flag);
+        return (
+          <div key={w.id} style={{padding:"10px 12px",background:"#FAF7F2",borderRadius:4,border:"1px solid rgba(15,26,46,.08)"}}>
+            <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:8,gap:8,flexWrap:"wrap"}}>
+              <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:13,fontWeight:600,color:"#0F1A2E",letterSpacing:-.1}}>
+                {w.title || `Worksheet ${wIdx+1}`}
+              </div>
+              <div style={{display:"flex",gap:6,fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,letterSpacing:.6}}>
+                <span style={{color:"#4C7A4C"}}>✓ {ok}</span>
+                <span style={{color:"#8C2E2E"}}>✗ {wrong}</span>
+                {ungraded > 0 && <span style={{color:"#9A5B1F"}}>— {ungraded}</span>}
+              </div>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:"6px 8px",fontFamily:"'IBM Plex Mono',monospace",fontSize:12}}>
+              {slots.map(({i, r, pq})=>{
+                const ans = r && typeof r.studentAnswer === "string" ? r.studentAnswer.trim() : "";
+                const isBlank = ans.length === 0;
+                const flag = r && r.flag ? r.flag : null;
+                const flagIcon = flag === "star" ? "★" : flag === "question" ? "?" : null;
+                const flagColor = flag === "star" ? "#9A5B1F" : flag === "question" ? "#5C4178" : null;
+                let bg="#fff", fg="#0F1A2E", border="rgba(15,26,46,.12)", reveal=null;
+                if(pq){
+                  if(pq.correct === true){
+                    bg="#E4F0E2"; fg="#2D5A2D"; border="rgba(76,122,76,.4)";
+                  } else if(pq.correct === false){
+                    bg="#F4DADA"; fg="#7A2020"; border="rgba(140,46,46,.4)";
+                    reveal = pq.correctAnswer;
+                  } else {
+                    bg="#FFF1DE"; fg="#7A5318"; border="rgba(154,91,31,.4)";
+                  }
+                }
+                return (
+                  <span key={i} style={{
+                    display:"inline-flex",alignItems:"center",gap:4,
+                    padding:"3px 8px",borderRadius:4,
+                    background:bg, color:fg, border:`1px solid ${border}`,
+                  }}>
+                    <span style={{opacity:.7,fontWeight:500}}>{i+1}.</span>
+                    <span style={{fontStyle:isBlank?"italic":"normal",fontWeight:isBlank?400:600,opacity:isBlank?.65:1}}>
+                      {isBlank ? "blank" : ans}
+                    </span>
+                    {reveal && <span style={{opacity:.8,fontWeight:500}}>(✓ {reveal})</span>}
+                    {flagIcon && (
+                      <span style={{color:flagColor,fontWeight:700,marginLeft:2}} title={flag === "star" ? "I had trouble" : "I guessed / skipped"}>
+                        {flagIcon}
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+            {hasAnyFlag && (
+              <div style={{marginTop:6,fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#66708A",letterSpacing:.3,lineHeight:1.5}}>
+                <span style={{color:"#9A5B1F",fontWeight:700,marginRight:3}}>★</span> had trouble
+                <span style={{marginLeft:12,color:"#5C4178",fontWeight:700,marginRight:3}}>?</span> guessed / skipped
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AnswerResultIndicator({result}){
   if(!result){
     return <span style={{width:22, flexShrink:0}}/>;
@@ -7855,6 +7970,19 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose, focusWorksh
         }}>
           {gradeBanner.label}
         </div>
+      )}
+
+      {/* Session 18C v6: at-a-glance review chip grid for the locked
+          submission. Same component used in the tutor's review panel,
+          rendered here so the student can quickly scan which questions
+          they got right/wrong + their flags without scrolling the full
+          editor. Only renders when graded data is available. */}
+      {isLocked && submission && Array.isArray(submission.perQuestion) && submission.perQuestion.length > 0 && (
+        <SubmissionReviewGrid
+          worksheets={worksheetsStable}
+          perQuestion={submission.perQuestion}
+          responses={Array.isArray(submission.responses) ? submission.responses : []}
+        />
       )}
 
       {catalogStatus === "error" && hasAnyWorksheets && (
