@@ -7355,6 +7355,15 @@ function AssignmentDetailView({student, studentId, assignment, submissions, canE
 // worksheet drill-in opens a fresh per-WS doc lifecycle.
 function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, onClose}){
   const {catalog, status: catalogStatus} = useWorksheetCatalog();
+  // Session 18C v13: internal currentWsId allows switching worksheets
+  // without unmounting the editor. Initial value is the worksheetId
+  // prop; user can change it via the nav pane above the worksheet,
+  // which flushes the current draft before switching.
+  const [currentWsId, setCurrentWsId] = useState(worksheetId);
+  // Keep currentWsId in sync if parent re-mounts with a different
+  // initial worksheetId (rare — parent should change key instead).
+  useEffect(()=>{ setCurrentWsId(worksheetId); }, [worksheetId]);
+
   const [doc, setDoc] = useState(null);       // current per-WS doc snapshot
   const [docLoaded, setDocLoaded] = useState(false);
   const [answers, setAnswers] = useState([]); // [string]
@@ -7365,10 +7374,16 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
   const [savingExit, setSavingExit] = useState(false);
   const dirtyRef = useRef(false);
   const debounceRef = useRef(null);
+  // All non-deleted worksheets in this PSM, for the nav pane.
+  const allWorksheets = useMemo(()=>
+    (assignment.worksheets || []).filter(w => w && !w.deleted),
+    [assignment.worksheets]);
+  // Live per-WS doc map for the nav-pane status badges.
+  const perWs = useWorksheetSubmissions(studentId, assignment.id);
 
   const worksheet = useMemo(()=>
-    (assignment.worksheets || []).find(w => w && w.id === worksheetId),
-    [assignment.worksheets, worksheetId]);
+    allWorksheets.find(w => w.id === currentWsId),
+    [allWorksheets, currentWsId]);
   const catalogEntry = useMemo(()=>{
     if(catalogStatus !== "ready" || !catalog || !worksheet) return null;
     const row = catalog.find(c => c.title === worksheet.title);
@@ -7383,7 +7398,17 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
       setDocLoaded(true);
       return;
     }
-    const unsub = col.doc(worksheetId).onSnapshot((snap)=>{
+    // Session 18C v13: reset local state when switching worksheets,
+    // so we don't see stale answers/flags from the previous worksheet
+    // while waiting for the new snapshot to fire.
+    setDoc(null);
+    setDocLoaded(false);
+    setAnswers([]);
+    setFlags([]);
+    setLocalStatus("draft");
+    setSubmittedAt(null);
+    dirtyRef.current = false;
+    const unsub = col.doc(currentWsId).onSnapshot((snap)=>{
       if(snap.exists){
         const data = snap.data() || {};
         setDoc(data);
@@ -7403,7 +7428,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
           setLocalStatus(data.status || "draft");
           setSubmittedAt(data.submittedAt || null);
         }
-      } else if(!doc) {
+      } else {
         // Brand-new — seed empty array based on catalog length.
         const expected = catalogEntry?.questionIds?.length || 0;
         if(!dirtyRef.current){
@@ -7418,7 +7443,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
       setDocLoaded(true);
     });
     return ()=>unsub();
-  }, [studentId, assignment.id, worksheetId, catalogEntry]);
+  }, [studentId, assignment.id, currentWsId, catalogEntry]);
 
   const isLocked = readOnly || localStatus === "submitted";
 
@@ -7438,8 +7463,8 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     });
     try{
       const FV = firebase.firestore.FieldValue;
-      await col.doc(worksheetId).set({
-        worksheetId,
+      await col.doc(currentWsId).set({
+        worksheetId: currentWsId,
         responses,
         status: "draft",
         updatedAt: FV.serverTimestamp(),
@@ -7495,7 +7520,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
       await writeDraft(); // flush latest draft first
       const col = studentAssignmentWorksheetSubmissionsCollection(studentId, assignment.id);
       const FV = firebase.firestore.FieldValue;
-      await col.doc(worksheetId).update({
+      await col.doc(currentWsId).update({
         status: "submitted",
         submittedAt: FV.serverTimestamp(),
       });
@@ -7523,6 +7548,41 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
       setSavingExit(false);
       onClose && onClose();
     }
+  };
+
+  // Session 18C v13: switch between worksheets without leaving the
+  // editor. Flushes the current draft before changing currentWsId so
+  // no in-progress answers are lost. The snapshot subscription re-fires
+  // for the new worksheet, seeding its state.
+  const switchWorksheet = async (newWsId) => {
+    if(!newWsId || newWsId === currentWsId) return;
+    if(!isLocked){
+      // Flush any pending debounced write + the current state.
+      try{
+        if(debounceRef.current){ clearTimeout(debounceRef.current); debounceRef.current = null; }
+        await writeDraft();
+      } catch { /* ignore — switch anyway so user isn't stuck */ }
+    }
+    setCurrentWsId(newWsId);
+  };
+
+  // Derive status pill kind for a worksheet in the nav. Uses the live
+  // per-WS doc when available, otherwise legacy fallback.
+  function navStatusFor(wsId){
+    const perDoc = perWs.byWorksheet[wsId];
+    if(perDoc){
+      if(typeof perDoc.scoreCorrect === "number") return { kind: "graded", score: `${perDoc.scoreCorrect}/${perDoc.scoreTotal}` };
+      if(perDoc.status === "submitted") return { kind: "submitted" };
+      const hasAns = (perDoc.responses || []).some(r => (r.studentAnswer || "").trim() !== "");
+      return hasAns ? { kind: "in-progress" } : { kind: "not-started" };
+    }
+    return { kind: "not-started" };
+  }
+  const NAV_STATUS_STYLE = {
+    "not-started":  { bg: "transparent",  fg: "#66708A",  border: "rgba(15,26,46,.18)" },
+    "in-progress":  { bg: "#FFF1DE",      fg: "#9A5B1F",  border: "rgba(154,91,31,.4)" },
+    "submitted":    { bg: "#E9F0F6",      fg: "#003258",  border: "rgba(0,50,88,.35)"  },
+    "graded":       { bg: "#E4F0E2",      fg: "#4C7A4C",  border: "rgba(76,122,76,.4)" },
   };
 
   if(!worksheet){
@@ -7578,12 +7638,76 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
         </div>
       )}
 
+      {/* Session 18C v13: PSM nav strip. Lists every worksheet in the
+          PSM with its status pill. Clicking one auto-saves the current
+          draft and switches. Lets students jump around without leaving
+          the editor. */}
+      {allWorksheets.length > 1 && (
+        <div style={{
+          marginBottom:16, padding:"10px 12px",
+          background:"#FAF7F2", border:"1px solid rgba(15,26,46,.08)",
+          borderRadius:6,
+        }}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:1.2,color:"#66708A",textTransform:"uppercase",marginBottom:8}}>
+            PSM Worksheets ({allWorksheets.length}) · click to switch
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {allWorksheets.map((w, idx)=>{
+              const st = navStatusFor(w.id);
+              const sty = NAV_STATUS_STYLE[st.kind] || NAV_STATUS_STYLE["not-started"];
+              const active = w.id === currentWsId;
+              return (
+                <button
+                  key={w.id}
+                  onClick={()=> switchWorksheet(w.id)}
+                  disabled={active}
+                  title={w.title || `Worksheet ${idx+1}`}
+                  style={{
+                    cursor: active ? "default" : "pointer",
+                    border: active ? "2px solid #0F1A2E" : `1px solid ${sty.border}`,
+                    background: active ? "#0F1A2E" : "#fff",
+                    color: active ? "#FAF7F2" : "#0F1A2E",
+                    padding:"6px 12px", borderRadius:4,
+                    fontFamily:"inherit", fontSize:12,
+                    display:"inline-flex", alignItems:"center", gap:8,
+                    maxWidth: 280,
+                  }}
+                >
+                  <span style={{
+                    fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,
+                    color: active ? "rgba(250,247,242,.7)" : "#66708A",
+                    letterSpacing:.6, textTransform:"uppercase",
+                  }}>{idx+1}.</span>
+                  <span style={{
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                    fontWeight: active ? 600 : 500,
+                  }}>{w.title || `Worksheet ${idx+1}`}</span>
+                  {!active && (
+                    <span style={{
+                      fontFamily:"'IBM Plex Mono',monospace", fontSize:8, fontWeight:700,
+                      letterSpacing:.6, textTransform:"uppercase",
+                      padding:"2px 6px", borderRadius:2,
+                      background:sty.bg, color:sty.fg, border:`1px solid ${sty.border}`,
+                    }}>
+                      {st.kind === "graded" ? `✓ ${st.score}` :
+                       st.kind === "submitted" ? "Done" :
+                       st.kind === "in-progress" ? "Draft" :
+                       "—"}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Review chip grid only after submission, like SubmissionEditor */}
       {localStatus === "submitted" && Array.isArray(doc?.perQuestion) && doc.perQuestion.length > 0 && (
         <SubmissionReviewGrid
           worksheets={[worksheet]}
-          perQuestion={(doc.perQuestion || []).map(p => ({...p, worksheetId}))}
-          responses={(doc.responses || []).map(r => ({...r, worksheetId}))}
+          perQuestion={(doc.perQuestion || []).map(p => ({...p, worksheetId: currentWsId}))}
+          responses={(doc.responses || []).map(r => ({...r, worksheetId: currentWsId}))}
         />
       )}
 
