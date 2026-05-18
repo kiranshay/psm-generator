@@ -7975,33 +7975,21 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     "graded":       { bg: "#E4F0E2",      fg: "#4C7A4C",  border: "rgba(76,122,76,.4)" },
   };
 
-  if(!worksheet){
-    return (
-      <div style={{...CARD, padding:"40px 24px", textAlign:"center"}}>
-        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",color:"#8C2E2E",fontSize:18,marginBottom:14}}>
-          Worksheet not found.
-        </div>
-        <button onClick={onClose} style={SUBMIT_EDITOR_BACK_BTN}>← Back to PSM</button>
-      </div>
-    );
-  }
-  if(catalogStatus === "loading" || !docLoaded){
-    return (
-      <div style={{...CARD, padding:"40px 24px", textAlign:"center"}}>
-        <div style={{fontFamily:"'Fraunces',Georgia,serif",color:"#66708A"}}>Loading…</div>
-      </div>
-    );
-  }
-
-  // Session 18C v22: compute "effective" perQuestion/score for the chip
-  // grid + per-row result indicators. Per-WS doc is the primary source,
-  // BUT if it lacks perQuestion (e.g. grader hasn't run yet, or this WS
-  // was originally submitted under the legacy whole-PSM path), fall back
-  // to the legacy submission's perQuestion filtered to this worksheet.
-  // Without this overlay, submitted worksheets show "Submitted · Score
-  // pending…" forever with no chip grid even though the legacy doc has
-  // the per-question results — that's the "Review button works but no
-  // per-question breakdown shows" bug.
+  // Session 18C v22 (v24 hotfix): compute "effective" perQuestion/score
+  // for the chip grid + per-row result indicators. Per-WS doc is the
+  // primary source, BUT if it lacks perQuestion (e.g. grader hasn't run
+  // yet, or this WS was originally submitted under the legacy whole-PSM
+  // path), fall back to the legacy submission's perQuestion filtered to
+  // this worksheet. Without this overlay, submitted worksheets show
+  // "Submitted · Score pending…" forever with no chip grid.
+  //
+  // v24 CRITICAL: these useMemo hooks MUST live above the early-return
+  // guards below. v22 put them after the !worksheet / !docLoaded guards,
+  // which violated React's Rules of Hooks — on first render the guards
+  // hit early-return before the memos ran, then on the next render the
+  // hook count jumped, triggering "Rendered more hooks than during the
+  // previous render" and crashing SingleWorksheetEditor. That crash is
+  // what made Answer/Review go to a blank screen on the student portal.
   const effectivePerQuestion = useMemo(()=>{
     const docPq = Array.isArray(doc?.perQuestion) ? doc.perQuestion : [];
     if(docPq.length > 0) return docPq;
@@ -8027,6 +8015,24 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     }
     return null;
   }, [doc, effectivePerQuestion]);
+
+  if(!worksheet){
+    return (
+      <div style={{...CARD, padding:"40px 24px", textAlign:"center"}}>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",color:"#8C2E2E",fontSize:18,marginBottom:14}}>
+          Worksheet not found.
+        </div>
+        <button onClick={onClose} style={SUBMIT_EDITOR_BACK_BTN}>← Back to PSM</button>
+      </div>
+    );
+  }
+  if(catalogStatus === "loading" || !docLoaded){
+    return (
+      <div style={{...CARD, padding:"40px 24px", textAlign:"center"}}>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",color:"#66708A"}}>Loading…</div>
+      </div>
+    );
+  }
 
   // Banner: graded? submitted? draft?
   // Session 18C v16: always show a status banner so the student knows
