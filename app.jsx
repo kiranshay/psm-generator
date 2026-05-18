@@ -7374,6 +7374,21 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
   const [savingExit, setSavingExit] = useState(false);
   const dirtyRef = useRef(false);
   const debounceRef = useRef(null);
+  // Session 18C v15: refs to the latest answers/flags so writeDraft
+  // always uses the most recent values, regardless of which render's
+  // closure scheduled it. Fixes the race where:
+  //   1. user types "4" → schedules writeDraft A with answers=["4"]
+  //   2. user types "81" → schedules writeDraft B with answers=["4","81"]
+  //   3. user types "192" → schedules writeDraft C with answers=["4","81","192"]
+  //   4. A starts; B and C overlap; whichever lands LAST in Firestore
+  //      wins, and if it's an older one we lose later answers.
+  // With refs, every writeDraft reads from the same source of truth
+  // (the latest state), so even out-of-order completions write the
+  // same correct data.
+  const answersRef = useRef([]);
+  const flagsRef = useRef([]);
+  // pendingWriteRef serializes writes so they complete in order.
+  const pendingWriteRef = useRef(Promise.resolve());
   // All non-deleted worksheets in this PSM, for the nav pane.
   const allWorksheets = useMemo(()=>
     (assignment.worksheets || []).filter(w => w && !w.deleted),
@@ -7447,33 +7462,59 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
 
   const isLocked = readOnly || localStatus === "submitted";
 
+  // Session 18C v15: keep refs in sync with the latest state so any
+  // writeDraft call (even an older one still running) reads the most
+  // recent values.
+  useEffect(()=>{ answersRef.current = answers; }, [answers]);
+  useEffect(()=>{ flagsRef.current = flags; }, [flags]);
+
   const writeDraft = async (overrideAnswers, overrideFlags) => {
     if(isLocked) return;
     const col = studentAssignmentWorksheetSubmissionsCollection(studentId, assignment.id);
     if(!col) return;
-    const aArr = overrideAnswers || answers;
-    const fArr = overrideFlags  || flags;
-    const responses = aArr.map((v, i) => {
-      const obj = {
-        questionIndex: i,
-        studentAnswer: typeof v === "string" ? v : "",
-      };
-      if(fArr[i]) obj.flag = fArr[i];
-      return obj;
-    });
-    try{
-      const FV = firebase.firestore.FieldValue;
-      await col.doc(currentWsId).set({
-        worksheetId: currentWsId,
-        responses,
-        status: "draft",
-        updatedAt: FV.serverTimestamp(),
-        createdAt: FV.serverTimestamp(), // server merges; only sets first time
-      }, {merge: true});
-      dirtyRef.current = false;
-    } catch(e){
-      console.warn("[SingleWorksheetEditor] draft write failed:", e);
-    }
+    // Serialize writes so completion order matches scheduling order.
+    // Without this, two debounced writes can race and the older one's
+    // completion could overwrite the newer one's data.
+    const myWrite = pendingWriteRef.current.then(async ()=>{
+      // Always read from the refs (latest values), NOT from closure.
+      const aArr = overrideAnswers || answersRef.current || [];
+      const fArr = overrideFlags  || flagsRef.current  || [];
+      // Pad the responses array to the full catalog length so we never
+      // lose slots when the local answers array is shorter than the
+      // worksheet's question count (the seed inits to `expected` but
+      // setAnswerAt can shrink it if a parent re-renders with a smaller
+      // answers prop). Defensive — every slot up to expected gets a row.
+      const expectedLen = Math.max(
+        catalogEntry?.questionIds?.length || 0,
+        aArr.length,
+        fArr.length,
+      );
+      const responses = [];
+      for(let i = 0; i < expectedLen; i++){
+        const v = aArr[i];
+        const obj = {
+          questionIndex: i,
+          studentAnswer: typeof v === "string" ? v : "",
+        };
+        if(fArr[i]) obj.flag = fArr[i];
+        responses.push(obj);
+      }
+      try{
+        const FV = firebase.firestore.FieldValue;
+        await col.doc(currentWsId).set({
+          worksheetId: currentWsId,
+          responses,
+          status: "draft",
+          updatedAt: FV.serverTimestamp(),
+          createdAt: FV.serverTimestamp(), // server merges; only sets first time
+        }, {merge: true});
+        dirtyRef.current = false;
+      } catch(e){
+        console.warn("[SingleWorksheetEditor] draft write failed:", e);
+      }
+    }).catch(()=>{ /* prior write rejected — keep chain alive */ });
+    pendingWriteRef.current = myWrite;
+    return myWrite;
   };
 
   // Debounced autosave on answer/flag changes.
