@@ -2,6 +2,13 @@ node_modules/
 .env
 .env.*
 !.env.example
+# Session 18C v26: per-project env file is committed so the CI deploy
+# (.github/workflows/deploy.yml) can run non-interactive
+# `firebase deploy --only functions`. Holds only non-secret params —
+# URLs, IDs, booleans. Real secrets (WISE_API_KEY, WISE_USER_ID, etc.)
+# live in Secret Manager and are pulled at runtime via defineSecret()
+# in functions/config.js, never committed here.
+!.env.psm-generator
 *.log
 .runtimeconfig.json
 
