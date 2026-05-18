@@ -5867,7 +5867,20 @@ function StudentPortal({studentId, onSignOut, currentUserEntry, switcherSlot, im
       </div>
 
       {tab==="tracking" && <PortalTrackingTab student={student} submissions={portalSubmissions}/>}
-      {tab==="history"  && <PortalHistoryTab student={student} studentId={studentId} currentUserEntry={currentUserEntry} deepLinkAssignmentId={deepLinkAssignmentId} submissions={portalSubmissions}/>}
+      {tab==="history"  && (
+        <PortalErrorBoundary fallback={
+          <div style={{...CARD, padding:"40px 24px", textAlign:"center"}}>
+            <div style={{fontFamily:"'Fraunces',Georgia,serif",fontStyle:"italic",color:"#8C2E2E",fontSize:18,marginBottom:14}}>
+              Couldn't load assignment history.
+            </div>
+            <div style={{fontSize:12,color:"#66708A",lineHeight:1.55}}>
+              Refresh the page — if it persists, ping your tutor.
+            </div>
+          </div>
+        }>
+          <PortalHistoryTab student={student} studentId={studentId} currentUserEntry={currentUserEntry} deepLinkAssignmentId={deepLinkAssignmentId} submissions={portalSubmissions} impersonating={impersonating}/>
+        </PortalErrorBoundary>
+      )}
       {tab==="trends"   && <PortalTrendsTab student={student}/>}
     </PortalShell>
   );
@@ -6649,7 +6662,16 @@ function PortalPsmWorksheetList({studentId, assignment, worksheets, legacySubmis
   );
 }
 
-function PortalHistoryTab({student, studentId, currentUserEntry, deepLinkAssignmentId, submissions}){
+function PortalHistoryTab({student, studentId, currentUserEntry, deepLinkAssignmentId, submissions, impersonating}){
+  // Session 18C v27: `impersonating` was referenced inside this function
+  // (readOnly prop on SubmissionEditor, impersonating prop on
+  // AssignmentDetailView) but never destructured from props. That made
+  // it an undeclared identifier in JS — a ReferenceError the moment the
+  // expression evaluated. Crashed the entire History tab subtree the
+  // first time a student clicked into a past PSM, with no error
+  // boundary upstream to catch it ⇒ white screen.
+  // Now passed in from StudentPortal and defaults to undefined/false
+  // when not impersonating, matching how PortalShell uses it.
   const [openAssignmentId, setOpenAssignmentId] = useState(null);
   // Session 18A: per-worksheet click-through. When openWorksheetId is
   // set, SubmissionEditor renders ONLY that worksheet; submitting it
