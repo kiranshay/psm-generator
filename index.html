@@ -1343,10 +1343,21 @@ async function parseWelledReport(file){
   }
 
   // Anchor: find the section-scores block.
+  // Session 18C v22: the "<NNN> 200 to 800" scale-label pattern often
+  // appears in the column-aware xSortedText pass (which comes AFTER
+  // fullText in textForSearch). A 1200-char window from the TOTAL SCORE
+  // anchor in fullText routinely misses it, so parser falls back to the
+  // tight label grab which catches "Math\n\n\n            800" — i.e.
+  // the SCALE LABEL "800" instead of the actual score. Fix: ALWAYS
+  // include the entire xSortedText in the search block, so the scale-
+  // label pattern wins whenever it's present anywhere in the doc.
   const anchorMatch = textForSearch.match(/TOTAL\s*SCORE/i);
-  const scoreBlock = anchorMatch
+  const anchoredSlice = anchorMatch
     ? textForSearch.slice(anchorMatch.index, anchorMatch.index + 1200)
     : textForSearch.slice(0, 2000);
+  // Combine anchored slice with the column-aware pass. The separator
+  // newline keeps regex word/line anchors honest across the join.
+  const scoreBlock = anchoredSlice + "\n" + xSortedText;
 
   // 1. Total — try total-range first (400 to 1600), fall back to tight
   // label-anchored grab.
@@ -1821,6 +1832,55 @@ function useTutorSubmissions(studentId){
     return ()=>unsub();
   }, [studentId]);
   return state;
+}
+
+// Session 18C v22: aggregate per-WS submissions across ALL of a student's
+// assignments. Returns [{aid, wsId, doc}] suitable for allScoreDataPoints'
+// `perWsSubmissions` arg, so per-WS grades flow into the score-tracking
+// pipeline (domain + subskill cards). Previously allScoreDataPoints accepted
+// this arg but no caller provided it, so per-WS submissions never appeared
+// in score tracking — that's the "LinFns Hard isn't counting" bug.
+function useStudentAllPerWsSubmissions(studentId, assignments){
+  const aidsKey = useMemo(
+    () => (assignments||[]).map(a => a && a.id).filter(Boolean).sort().join(","),
+    [assignments]
+  );
+  const [entries, setEntries] = useState([]);
+  useEffect(()=>{
+    if(!studentId || !aidsKey){
+      setEntries([]);
+      return;
+    }
+    const aids = aidsKey.split(",").filter(Boolean);
+    // Mutable map kept across snapshot callbacks so updates from one
+    // assignment don't wipe out the others.
+    const docsByAid = {};
+    aids.forEach(aid => { docsByAid[aid] = {}; });
+    const rebuild = () => {
+      const out = [];
+      for(const aid of Object.keys(docsByAid)){
+        const wsMap = docsByAid[aid] || {};
+        for(const wsId of Object.keys(wsMap)){
+          out.push({aid, wsId, doc: wsMap[wsId]});
+        }
+      }
+      setEntries(out);
+    };
+    const unsubs = aids.map(aid => {
+      const col = studentAssignmentWorksheetSubmissionsCollection(studentId, aid);
+      if(!col) return ()=>{};
+      return col.onSnapshot(snap => {
+        const byWs = {};
+        snap.forEach(d => { byWs[d.id] = {id:d.id, ...d.data()}; });
+        docsByAid[aid] = byWs;
+        rebuild();
+      }, (err)=>{
+        console.warn("[useStudentAllPerWsSubmissions] snapshot error:", aid, err);
+      });
+    });
+    return ()=>{ unsubs.forEach(u => { try{ u(); } catch { /**/ } }); };
+  }, [studentId, aidsKey]);
+  return entries;
 }
 
 // Fetches display metadata ({id, name, grade}) for a small list of children
@@ -5686,8 +5746,14 @@ function StudentSummaryCard({student}){
 
   // Recent score breakdown — most recent data point per domain and per subdomain
   // Session 18A: include graded submissions so the breakdown reflects portal grading.
+  // Session 18C v22: also include per-WS subcollection submissions so the
+  // new per-worksheet submit path feeds the summary card.
   const {submissions: summarySubmissions} = useTutorSubmissions(student?.id);
-  const scorePts = useMemo(()=>allScoreDataPoints(student, summarySubmissions),[student, summarySubmissions]);
+  const summaryPerWs = useStudentAllPerWsSubmissions(student?.id, student?.assignments);
+  const scorePts = useMemo(
+    ()=>allScoreDataPoints(student, summarySubmissions, summaryPerWs),
+    [student, summarySubmissions, summaryPerWs]
+  );
   const latestDomainByKey = useMemo(()=>{
     const m = {};
     scorePts.forEach(pt=>{
@@ -6496,7 +6562,10 @@ function LatestPsmCard({student, studentId, submissions, canEdit}){
   // For the latest PSM we resolve its id first, then subscribe to
   // that subcollection.
   const latest = useMemo(()=>{
-    const list = (student.assignments||[]).filter(a => !a.deleted);
+    // Session 18C v23: exclude pre-assigned PSMs. They're informational
+    // (reference material the tutor recorded retroactively) and the
+    // student should never be prompted to "submit" them via the portal.
+    const list = (student.assignments||[]).filter(a => !a.deleted && !a.preAssigned);
     if(list.length === 0) return null;
     // Session 18C v21: assignments are appended in insertion order, so
     // reversing first puts the newest at index 0. The stable date sort
@@ -6926,7 +6995,10 @@ class PortalErrorBoundary extends React.Component {
 // the ErrorBoundary fallback so students always see SOMETHING even if
 // the new ScoreHistoryPanel mirror errors out.
 function _LegacyPortalTrackingTab({student, submissions}){
-  const pts = allScoreDataPoints(student, submissions);
+  // Session 18C v22: feed per-WS submissions so this fallback view also
+  // shows graded per-worksheet submissions.
+  const legacyPerWs = useStudentAllPerWsSubmissions(student?.id, student?.assignments);
+  const pts = allScoreDataPoints(student, submissions, legacyPerWs);
   const diagProfile = (student.diagnostics||[]).length ? buildDiagnosticProfile(student.diagnostics) : null;
   const welled = (student.welledLogs||[]).filter(l=>!l.deleted);
 
@@ -7106,6 +7178,9 @@ function PortalEmptyInline({copy}){
 // submission (responses[]) when no per-WS doc exists yet.
 function PortalPsmWorksheetList({studentId, assignment, worksheets, legacySubmission, canEdit, onOpen, hasWelledOrExams}){
   const perWs = useWorksheetSubmissions(studentId, assignment.id);
+  // Session 18C v23: pre-assigned PSMs are reference-only on the student
+  // portal — no submission requested.
+  const isPreAssigned = !!assignment.preAssigned;
   const STATUS_STYLE = {
     "not-started":  { bg: "transparent",  fg: "#66708A",  border: "rgba(15,26,46,.18)", label: "Not started",  cta: "Answer →"  },
     "in-progress":  { bg: "#FFF1DE",      fg: "#9A5B1F",  border: "rgba(154,91,31,.4)", label: "In progress",  cta: "Continue →" },
@@ -7137,7 +7212,9 @@ function PortalPsmWorksheetList({studentId, assignment, worksheets, legacySubmis
         const sty = STATUS_STYLE[st.kind] || STATUS_STYLE["not-started"];
         const isDone = st.kind === "submitted" || st.kind === "graded";
         // Even non-edit roles (parent) can click to review submitted work.
-        const isClickable = canEdit || isDone;
+        // Session 18C v23: pre-assigned PSMs are reference-only — never
+        // clickable on the student portal regardless of role.
+        const isClickable = !isPreAssigned && (canEdit || isDone);
         return (
           <button
             key={w.id}
@@ -7145,8 +7222,8 @@ function PortalPsmWorksheetList({studentId, assignment, worksheets, legacySubmis
             disabled={!isClickable}
             style={{
               textAlign:"left",
-              background:"#fff",
-              border:`1px solid ${sty.border}`,
+              background: isPreAssigned ? "#FAF7F2" : "#fff",
+              border:`1px solid ${isPreAssigned ? "rgba(154,91,31,.35)" : sty.border}`,
               borderRadius:6,
               padding:"10px 12px",
               cursor: isClickable ? "pointer" : "default",
@@ -7155,6 +7232,7 @@ function PortalPsmWorksheetList({studentId, assignment, worksheets, legacySubmis
               alignItems:"center",
               gap:10,
               flexWrap:"wrap",
+              opacity: isPreAssigned ? 0.85 : 1,
             }}
           >
             <div style={{flex:"1 1 200px",minWidth:0}}>
@@ -7165,17 +7243,30 @@ function PortalPsmWorksheetList({studentId, assignment, worksheets, legacySubmis
                 {w.subject||""} {w.domain?`· ${w.domain}`:""} {w.difficulty?`· ${w.difficulty}`:""}{w.evenOdd?` · ${w.evenOdd}`:""}
               </div>
             </div>
-            <span style={{
-              fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",
-              padding:"4px 10px",borderRadius:3,
-              background:sty.bg, color:sty.fg, border:`1px solid ${sty.border}`,
-              flexShrink:0,
-            }}>
-              {st.kind === "graded" ? `Graded · ${st.score}` : sty.label}
-            </span>
-            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:isDone?"#003258":"#9A5B1F",letterSpacing:.6,textTransform:"uppercase",flexShrink:0}}>
-              {sty.cta}
-            </span>
+            {isPreAssigned ? (
+              <span style={{
+                fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",
+                padding:"4px 10px",borderRadius:3,
+                background:"transparent", color:"#6E3F12", border:"1px solid rgba(154,91,31,.4)",
+                flexShrink:0,
+              }}>
+                Pre-existing · reference only
+              </span>
+            ) : (
+              <>
+                <span style={{
+                  fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",
+                  padding:"4px 10px",borderRadius:3,
+                  background:sty.bg, color:sty.fg, border:`1px solid ${sty.border}`,
+                  flexShrink:0,
+                }}>
+                  {st.kind === "graded" ? `Graded · ${st.score}` : sty.label}
+                </span>
+                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:isDone?"#003258":"#9A5B1F",letterSpacing:.6,textTransform:"uppercase",flexShrink:0}}>
+                  {sty.cta}
+                </span>
+              </>
+            )}
           </button>
         );
       })}
@@ -7295,7 +7386,10 @@ function PortalHistoryTab({student, studentId, currentUserEntry, deepLinkAssignm
                 {asg.date || asg.dateAssigned || "Undated session"}
               </div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {scorePillLabel && (
+                {asg.preAssigned && (
+                  <span style={{...mkPill("transparent","#6E3F12"),border:"1px solid rgba(154,91,31,.5)",fontWeight:700}}>Pre-existing</span>
+                )}
+                {scorePillLabel && !asg.preAssigned && (
                   <span style={{...mkPill("transparent", scorePillTone), border:`1px solid ${scorePillBorder}`, fontWeight:600}}>{scorePillLabel}</span>
                 )}
                 {worksheets.length>0 && <span style={{...mkPill("transparent","#003258"),border:"1px solid rgba(0,50,88,.28)"}}>{worksheets.length} Worksheet{worksheets.length===1?"":"s"}</span>}
@@ -8090,7 +8184,9 @@ function AssignmentDetailView({student, studentId, assignment, submissions, canE
         )}
       </div>
       <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",letterSpacing:.6,textTransform:"uppercase",marginTop:6,marginBottom:18}}>
-        Click a worksheet to answer it. Submit each one and come back here for the next.
+        {assignment.preAssigned
+          ? "Pre-existing reference material — recorded by your tutor. No submission needed."
+          : "Click a worksheet to answer it. Submit each one and come back here for the next."}
       </div>
 
       {worksheets.length > 0 && (
@@ -8099,24 +8195,29 @@ function AssignmentDetailView({student, studentId, assignment, submissions, canE
             const st = statusFor(w.id);
             const sty = STATUS_STYLE[st.kind] || STATUS_STYLE["not-started"];
             const isDone = st.kind === "submitted" || st.kind === "graded";
+            // Session 18C v23: pre-assigned PSMs are reference-only on the
+            // student portal. Lock the row: no click, no CTA, "Pre-existing"
+            // pill instead of a status pill.
+            const isPreAssigned = !!assignment.preAssigned;
             const ctaLabel = isDone ? "Review →" : "Answer →";
             return (
               <button
                 key={w.id}
-                onClick={() => onOpenWorksheet(w.id)}
-                disabled={!canEdit && !isDone}
+                onClick={() => { if(!isPreAssigned) onOpenWorksheet(w.id); }}
+                disabled={isPreAssigned || (!canEdit && !isDone)}
                 style={{
                   textAlign:"left",
                   padding:"14px 16px",
                   borderRadius:6,
-                  border:`1px solid ${sty.border}`,
-                  background:"#fff",
-                  cursor:"pointer",
+                  border:`1px solid ${isPreAssigned ? "rgba(154,91,31,.35)" : sty.border}`,
+                  background: isPreAssigned ? "#FAF7F2" : "#fff",
+                  cursor: isPreAssigned ? "default" : "pointer",
                   display:"flex",
                   alignItems:"center",
                   gap:14,
                   flexWrap:"wrap",
                   fontFamily:"inherit",
+                  opacity: isPreAssigned ? 0.85 : 1,
                 }}
               >
                 <div style={{flex:"1 1 200px",minWidth:0}}>
@@ -8127,19 +8228,33 @@ function AssignmentDetailView({student, studentId, assignment, submissions, canE
                     {w.subject||""}{w.domain?` · ${w.domain}`:""}{w.difficulty?` · ${w.difficulty}`:""}{w.evenOdd?` · ${w.evenOdd}`:""}
                   </div>
                 </div>
-                <span style={{
-                  fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,
-                  letterSpacing:.6,textTransform:"uppercase",
-                  padding:"4px 10px",borderRadius:3,
-                  background:sty.bg, color:sty.fg, border:`1px solid ${sty.border}`,
-                  flexShrink:0,
-                }}>
-                  {st.kind === "graded" ? `Graded · ${st.score}` : sty.label}
-                </span>
-                <span style={{
-                  fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#0F1A2E",
-                  letterSpacing:.6,textTransform:"uppercase",fontWeight:600,flexShrink:0,
-                }}>{ctaLabel}</span>
+                {isPreAssigned ? (
+                  <span style={{
+                    fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,
+                    letterSpacing:.6,textTransform:"uppercase",
+                    padding:"4px 10px",borderRadius:3,
+                    background:"transparent", color:"#6E3F12", border:"1px solid rgba(154,91,31,.4)",
+                    flexShrink:0,
+                  }}>
+                    Pre-existing · reference only
+                  </span>
+                ) : (
+                  <>
+                    <span style={{
+                      fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,
+                      letterSpacing:.6,textTransform:"uppercase",
+                      padding:"4px 10px",borderRadius:3,
+                      background:sty.bg, color:sty.fg, border:`1px solid ${sty.border}`,
+                      flexShrink:0,
+                    }}>
+                      {st.kind === "graded" ? `Graded · ${st.score}` : sty.label}
+                    </span>
+                    <span style={{
+                      fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#0F1A2E",
+                      letterSpacing:.6,textTransform:"uppercase",fontWeight:600,flexShrink:0,
+                    }}>{ctaLabel}</span>
+                  </>
+                )}
               </button>
             );
           })}
@@ -8344,7 +8459,9 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     });
   }, [docLoaded, doc, legacySubmission, currentWsId, catalogEntry]);
 
-  const isLocked = readOnly || localStatus === "submitted";
+  // Session 18C v23: pre-assigned PSMs are reference-only; never allow
+  // a submit from the student portal even if a deep link reaches here.
+  const isLocked = readOnly || localStatus === "submitted" || !!assignment?.preAssigned;
 
   // Session 18C v15: keep refs in sync with the latest state so any
   // writeDraft call (even an older one still running) reads the most
@@ -8549,6 +8666,41 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     );
   }
 
+  // Session 18C v22: compute "effective" perQuestion/score for the chip
+  // grid + per-row result indicators. Per-WS doc is the primary source,
+  // BUT if it lacks perQuestion (e.g. grader hasn't run yet, or this WS
+  // was originally submitted under the legacy whole-PSM path), fall back
+  // to the legacy submission's perQuestion filtered to this worksheet.
+  // Without this overlay, submitted worksheets show "Submitted · Score
+  // pending…" forever with no chip grid even though the legacy doc has
+  // the per-question results — that's the "Review button works but no
+  // per-question breakdown shows" bug.
+  const effectivePerQuestion = useMemo(()=>{
+    const docPq = Array.isArray(doc?.perQuestion) ? doc.perQuestion : [];
+    if(docPq.length > 0) return docPq;
+    if(legacySubmission && Array.isArray(legacySubmission.perQuestion)){
+      const fromLegacy = legacySubmission.perQuestion.filter(
+        p => p && p.worksheetId === currentWsId
+      );
+      if(fromLegacy.length > 0) return fromLegacy;
+    }
+    return [];
+  }, [doc, legacySubmission, currentWsId]);
+  const effectiveScoreCorrect = useMemo(()=>{
+    if(typeof doc?.scoreCorrect === "number") return doc.scoreCorrect;
+    if(effectivePerQuestion.length > 0){
+      return effectivePerQuestion.filter(p => p && p.correct === true).length;
+    }
+    return null;
+  }, [doc, effectivePerQuestion]);
+  const effectiveScoreTotal = useMemo(()=>{
+    if(typeof doc?.scoreTotal === "number") return doc.scoreTotal;
+    if(effectivePerQuestion.length > 0){
+      return effectivePerQuestion.filter(p => p && (p.correct === true || p.correct === false)).length;
+    }
+    return null;
+  }, [doc, effectivePerQuestion]);
+
   // Banner: graded? submitted? draft?
   // Session 18C v16: always show a status banner so the student knows
   // what state their work is in (graded, pending, saved as draft, or
@@ -8556,8 +8708,8 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
   // silent and the student couldn't tell if their work was saved.
   let banner = null;
   if(localStatus === "submitted"){
-    if(typeof doc?.scoreCorrect === "number"){
-      const correct = doc.scoreCorrect, total = doc.scoreTotal;
+    if(typeof effectiveScoreCorrect === "number" && typeof effectiveScoreTotal === "number"){
+      const correct = effectiveScoreCorrect, total = effectiveScoreTotal;
       banner = {
         text: `Submitted · Graded: ${correct} / ${total}`,
         color: correct === total ? "#4C7A4C" : correct === 0 ? "#8C2E2E" : "#9A5B1F",
@@ -8654,12 +8806,14 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
         </div>
       )}
 
-      {/* Review chip grid only after submission, like SubmissionEditor */}
-      {localStatus === "submitted" && Array.isArray(doc?.perQuestion) && doc.perQuestion.length > 0 && (
+      {/* Review chip grid only after submission, like SubmissionEditor.
+          Session 18C v22: uses effectivePerQuestion which falls back to
+          legacy perQuestion when the per-WS doc lacks it. */}
+      {localStatus === "submitted" && effectivePerQuestion.length > 0 && (
         <SubmissionReviewGrid
           worksheets={[worksheet]}
-          perQuestion={(doc.perQuestion || []).map(p => ({...p, worksheetId: currentWsId}))}
-          responses={(doc.responses || []).map(r => ({...r, worksheetId: currentWsId}))}
+          perQuestion={effectivePerQuestion.map(p => ({...p, worksheetId: currentWsId}))}
+          responses={(doc?.responses || []).map(r => ({...r, worksheetId: currentWsId}))}
         />
       )}
 
@@ -8674,7 +8828,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
         indexLabel={`Worksheet · ${worksheet.title || ""}`}
         results={localStatus === "submitted" ? (() => {
           const out = [];
-          for(const pq of (doc?.perQuestion || [])){
+          for(const pq of effectivePerQuestion){
             if(pq && typeof pq.questionIndex === "number") out[pq.questionIndex] = pq;
           }
           return out;
@@ -9440,7 +9594,11 @@ function TutorPerWsSection({student}){
   const [openAsgId, setOpenAsgId] = useState(null);
   const [regradeBusy, setRegradeBusy] = useState({});
   const [regradeResults, setRegradeResults] = useState({});
-  const assignments = (student.assignments || []).filter(a => !a.deleted);
+  // Session 18C v23: pre-assigned PSMs are informational only (reference
+  // material the tutor recorded; student never submits them via the
+  // portal). Skip them in the per-WS section so they don't double-
+  // display alongside the legacy missed-question report below.
+  const assignments = (student.assignments || []).filter(a => !a.deleted && !a.preAssigned);
   // We render per-WS docs by iterating assignments and using a sub-component
   // per assignment that subscribes to the worksheetSubmissions subcollection.
   return (
@@ -9502,8 +9660,15 @@ function TutorPerWsAssignmentRow({studentId, assignment, open, onToggle, regrade
   // tutor end and say pending for ones that have yet to be completed.'
   // We render even if no per-WS doc exists yet so the tutor can see
   // the full PSM picture.
+  //
+  // Session 18C v23: BUT skip the whole assignment row if there are
+  // zero per-WS docs (i.e. this PSM was only ever submitted via the
+  // legacy whole-PSM path, OR was never touched at all). The legacy
+  // missed-question report renders right below this section and would
+  // double-display the same PSM otherwise. Once any per-WS doc exists,
+  // we show the full picture (with not-started chips for the rest).
   const anyDoc = worksheets.some(w => !!perWs.byWorksheet[w.id]);
-  if(!anyDoc && worksheets.length === 0){
+  if(!anyDoc){
     return null;
   }
   // Count by status for the row header.
@@ -10195,7 +10360,12 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
   // returns {submissions:[], error}, so an auth-timing failure on the
   // student-portal path won't propagate up and blank the portal.
   const {submissions: panelSubmissions} = useTutorSubmissions(p?.id);
-  const pts = allScoreDataPoints(p, panelSubmissions || []);
+  // Session 18C v22: per-WS subcollection submissions are now the primary
+  // path. Aggregate them across all of this student's assignments so the
+  // per-WS grades show up in domain + subskill charts. Without this,
+  // submissions like "LinFns Hard" via per-WS submit never reach scoring.
+  const panelPerWs = useStudentAllPerWsSubmissions(p?.id, p?.assignments);
+  const pts = allScoreDataPoints(p, panelSubmissions || [], panelPerWs || []);
   const [expanded,setExpanded] = useState({}); // {domainKey: true}
   const [diffFilter,setDiffFilter] = useState("all"); // all|easy|medium|hard|comprehensive
   const [wlog,setWlog] = useState({date:todayStr(),subject:"Reading & Writing",domain:"Information & Ideas",difficulty:"medium",score:"",notes:""});
@@ -10925,6 +11095,22 @@ function allScoreDataPoints(student, submissions = [], perWsSubmissions = []){
         _label: `${wsLabel} (submitted)`,
         _aid: entry.aid, _wsId: entry.wsId,
       });
+    } else {
+      // Session 18C v22: no subskill mapped and not Comp-prefixed —
+      // emit a DOMAIN-level fallback so the grade isn't silently dropped.
+      // Mirrors the legacy whole-PSM fallback added in v20.
+      pts.push({
+        date: dateStr,
+        category: `${w.subject||"Unknown"} — ${w.domain||"Unknown"}`,
+        subcategory: w.domain,
+        subject: w.subject, domain: w.domain,
+        score: correct, max: total, pct,
+        source: "submission_graded_perws",
+        difficulty: w.difficulty,
+        level: "domain",
+        _label: `${wsLabel} (submitted, no subskill mapped)`,
+        _aid: entry.aid, _wsId: entry.wsId,
+      });
     }
   });
   return pts.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
@@ -10934,7 +11120,11 @@ function allScoreDataPoints(student, submissions = [], perWsSubmissions = []){
 function ScoresTab({students,openProfile}){
   const[selSt,setSelSt]=useState(students[0]?.id||"");
   const st = students.find(s=>s.id===selSt)||students[0];
-  const pts = st?allScoreDataPoints(st):[];
+  // Session 18C v22: include per-WS submissions so the Scores tab
+  // matches the rest of the score-tracking surface.
+  const stSubs = useTutorSubmissions(st?.id);
+  const stPerWs = useStudentAllPerWsSubmissions(st?.id, st?.assignments);
+  const pts = st?allScoreDataPoints(st, stSubs?.submissions||[], stPerWs||[]):[];
 
   // Group by subcategory. For WellEd domain entries, further split by difficulty.
   const groups = useMemo(()=>{
