@@ -5889,7 +5889,10 @@ function LatestPsmCard({student, studentId, submissions, canEdit}){
   // For the latest PSM we resolve its id first, then subscribe to
   // that subcollection.
   const latest = useMemo(()=>{
-    const list = (student.assignments||[]).filter(a => !a.deleted);
+    // Session 18C v23: exclude pre-assigned PSMs. They're informational
+    // (reference material the tutor recorded retroactively) and the
+    // student should never be prompted to "submit" them via the portal.
+    const list = (student.assignments||[]).filter(a => !a.deleted && !a.preAssigned);
     if(list.length === 0) return null;
     // Session 18C v21: assignments are appended in insertion order, so
     // reversing first puts the newest at index 0. The stable date sort
@@ -6502,6 +6505,9 @@ function PortalEmptyInline({copy}){
 // submission (responses[]) when no per-WS doc exists yet.
 function PortalPsmWorksheetList({studentId, assignment, worksheets, legacySubmission, canEdit, onOpen, hasWelledOrExams}){
   const perWs = useWorksheetSubmissions(studentId, assignment.id);
+  // Session 18C v23: pre-assigned PSMs are reference-only on the student
+  // portal — no submission requested.
+  const isPreAssigned = !!assignment.preAssigned;
   const STATUS_STYLE = {
     "not-started":  { bg: "transparent",  fg: "#66708A",  border: "rgba(15,26,46,.18)", label: "Not started",  cta: "Answer →"  },
     "in-progress":  { bg: "#FFF1DE",      fg: "#9A5B1F",  border: "rgba(154,91,31,.4)", label: "In progress",  cta: "Continue →" },
@@ -6533,7 +6539,9 @@ function PortalPsmWorksheetList({studentId, assignment, worksheets, legacySubmis
         const sty = STATUS_STYLE[st.kind] || STATUS_STYLE["not-started"];
         const isDone = st.kind === "submitted" || st.kind === "graded";
         // Even non-edit roles (parent) can click to review submitted work.
-        const isClickable = canEdit || isDone;
+        // Session 18C v23: pre-assigned PSMs are reference-only — never
+        // clickable on the student portal regardless of role.
+        const isClickable = !isPreAssigned && (canEdit || isDone);
         return (
           <button
             key={w.id}
@@ -6541,8 +6549,8 @@ function PortalPsmWorksheetList({studentId, assignment, worksheets, legacySubmis
             disabled={!isClickable}
             style={{
               textAlign:"left",
-              background:"#fff",
-              border:`1px solid ${sty.border}`,
+              background: isPreAssigned ? "#FAF7F2" : "#fff",
+              border:`1px solid ${isPreAssigned ? "rgba(154,91,31,.35)" : sty.border}`,
               borderRadius:6,
               padding:"10px 12px",
               cursor: isClickable ? "pointer" : "default",
@@ -6551,6 +6559,7 @@ function PortalPsmWorksheetList({studentId, assignment, worksheets, legacySubmis
               alignItems:"center",
               gap:10,
               flexWrap:"wrap",
+              opacity: isPreAssigned ? 0.85 : 1,
             }}
           >
             <div style={{flex:"1 1 200px",minWidth:0}}>
@@ -6561,17 +6570,30 @@ function PortalPsmWorksheetList({studentId, assignment, worksheets, legacySubmis
                 {w.subject||""} {w.domain?`· ${w.domain}`:""} {w.difficulty?`· ${w.difficulty}`:""}{w.evenOdd?` · ${w.evenOdd}`:""}
               </div>
             </div>
-            <span style={{
-              fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",
-              padding:"4px 10px",borderRadius:3,
-              background:sty.bg, color:sty.fg, border:`1px solid ${sty.border}`,
-              flexShrink:0,
-            }}>
-              {st.kind === "graded" ? `Graded · ${st.score}` : sty.label}
-            </span>
-            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:isDone?"#003258":"#9A5B1F",letterSpacing:.6,textTransform:"uppercase",flexShrink:0}}>
-              {sty.cta}
-            </span>
+            {isPreAssigned ? (
+              <span style={{
+                fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",
+                padding:"4px 10px",borderRadius:3,
+                background:"transparent", color:"#6E3F12", border:"1px solid rgba(154,91,31,.4)",
+                flexShrink:0,
+              }}>
+                Pre-existing · reference only
+              </span>
+            ) : (
+              <>
+                <span style={{
+                  fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",
+                  padding:"4px 10px",borderRadius:3,
+                  background:sty.bg, color:sty.fg, border:`1px solid ${sty.border}`,
+                  flexShrink:0,
+                }}>
+                  {st.kind === "graded" ? `Graded · ${st.score}` : sty.label}
+                </span>
+                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,color:isDone?"#003258":"#9A5B1F",letterSpacing:.6,textTransform:"uppercase",flexShrink:0}}>
+                  {sty.cta}
+                </span>
+              </>
+            )}
           </button>
         );
       })}
@@ -6691,7 +6713,10 @@ function PortalHistoryTab({student, studentId, currentUserEntry, deepLinkAssignm
                 {asg.date || asg.dateAssigned || "Undated session"}
               </div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {scorePillLabel && (
+                {asg.preAssigned && (
+                  <span style={{...mkPill("transparent","#6E3F12"),border:"1px solid rgba(154,91,31,.5)",fontWeight:700}}>Pre-existing</span>
+                )}
+                {scorePillLabel && !asg.preAssigned && (
                   <span style={{...mkPill("transparent", scorePillTone), border:`1px solid ${scorePillBorder}`, fontWeight:600}}>{scorePillLabel}</span>
                 )}
                 {worksheets.length>0 && <span style={{...mkPill("transparent","#003258"),border:"1px solid rgba(0,50,88,.28)"}}>{worksheets.length} Worksheet{worksheets.length===1?"":"s"}</span>}
@@ -7486,7 +7511,9 @@ function AssignmentDetailView({student, studentId, assignment, submissions, canE
         )}
       </div>
       <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#66708A",letterSpacing:.6,textTransform:"uppercase",marginTop:6,marginBottom:18}}>
-        Click a worksheet to answer it. Submit each one and come back here for the next.
+        {assignment.preAssigned
+          ? "Pre-existing reference material — recorded by your tutor. No submission needed."
+          : "Click a worksheet to answer it. Submit each one and come back here for the next."}
       </div>
 
       {worksheets.length > 0 && (
@@ -7495,24 +7522,29 @@ function AssignmentDetailView({student, studentId, assignment, submissions, canE
             const st = statusFor(w.id);
             const sty = STATUS_STYLE[st.kind] || STATUS_STYLE["not-started"];
             const isDone = st.kind === "submitted" || st.kind === "graded";
+            // Session 18C v23: pre-assigned PSMs are reference-only on the
+            // student portal. Lock the row: no click, no CTA, "Pre-existing"
+            // pill instead of a status pill.
+            const isPreAssigned = !!assignment.preAssigned;
             const ctaLabel = isDone ? "Review →" : "Answer →";
             return (
               <button
                 key={w.id}
-                onClick={() => onOpenWorksheet(w.id)}
-                disabled={!canEdit && !isDone}
+                onClick={() => { if(!isPreAssigned) onOpenWorksheet(w.id); }}
+                disabled={isPreAssigned || (!canEdit && !isDone)}
                 style={{
                   textAlign:"left",
                   padding:"14px 16px",
                   borderRadius:6,
-                  border:`1px solid ${sty.border}`,
-                  background:"#fff",
-                  cursor:"pointer",
+                  border:`1px solid ${isPreAssigned ? "rgba(154,91,31,.35)" : sty.border}`,
+                  background: isPreAssigned ? "#FAF7F2" : "#fff",
+                  cursor: isPreAssigned ? "default" : "pointer",
                   display:"flex",
                   alignItems:"center",
                   gap:14,
                   flexWrap:"wrap",
                   fontFamily:"inherit",
+                  opacity: isPreAssigned ? 0.85 : 1,
                 }}
               >
                 <div style={{flex:"1 1 200px",minWidth:0}}>
@@ -7523,19 +7555,33 @@ function AssignmentDetailView({student, studentId, assignment, submissions, canE
                     {w.subject||""}{w.domain?` · ${w.domain}`:""}{w.difficulty?` · ${w.difficulty}`:""}{w.evenOdd?` · ${w.evenOdd}`:""}
                   </div>
                 </div>
-                <span style={{
-                  fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,
-                  letterSpacing:.6,textTransform:"uppercase",
-                  padding:"4px 10px",borderRadius:3,
-                  background:sty.bg, color:sty.fg, border:`1px solid ${sty.border}`,
-                  flexShrink:0,
-                }}>
-                  {st.kind === "graded" ? `Graded · ${st.score}` : sty.label}
-                </span>
-                <span style={{
-                  fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#0F1A2E",
-                  letterSpacing:.6,textTransform:"uppercase",fontWeight:600,flexShrink:0,
-                }}>{ctaLabel}</span>
+                {isPreAssigned ? (
+                  <span style={{
+                    fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,
+                    letterSpacing:.6,textTransform:"uppercase",
+                    padding:"4px 10px",borderRadius:3,
+                    background:"transparent", color:"#6E3F12", border:"1px solid rgba(154,91,31,.4)",
+                    flexShrink:0,
+                  }}>
+                    Pre-existing · reference only
+                  </span>
+                ) : (
+                  <>
+                    <span style={{
+                      fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:600,
+                      letterSpacing:.6,textTransform:"uppercase",
+                      padding:"4px 10px",borderRadius:3,
+                      background:sty.bg, color:sty.fg, border:`1px solid ${sty.border}`,
+                      flexShrink:0,
+                    }}>
+                      {st.kind === "graded" ? `Graded · ${st.score}` : sty.label}
+                    </span>
+                    <span style={{
+                      fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#0F1A2E",
+                      letterSpacing:.6,textTransform:"uppercase",fontWeight:600,flexShrink:0,
+                    }}>{ctaLabel}</span>
+                  </>
+                )}
               </button>
             );
           })}
@@ -7740,7 +7786,9 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     });
   }, [docLoaded, doc, legacySubmission, currentWsId, catalogEntry]);
 
-  const isLocked = readOnly || localStatus === "submitted";
+  // Session 18C v23: pre-assigned PSMs are reference-only; never allow
+  // a submit from the student portal even if a deep link reaches here.
+  const isLocked = readOnly || localStatus === "submitted" || !!assignment?.preAssigned;
 
   // Session 18C v15: keep refs in sync with the latest state so any
   // writeDraft call (even an older one still running) reads the most
@@ -8873,7 +8921,11 @@ function TutorPerWsSection({student}){
   const [openAsgId, setOpenAsgId] = useState(null);
   const [regradeBusy, setRegradeBusy] = useState({});
   const [regradeResults, setRegradeResults] = useState({});
-  const assignments = (student.assignments || []).filter(a => !a.deleted);
+  // Session 18C v23: pre-assigned PSMs are informational only (reference
+  // material the tutor recorded; student never submits them via the
+  // portal). Skip them in the per-WS section so they don't double-
+  // display alongside the legacy missed-question report below.
+  const assignments = (student.assignments || []).filter(a => !a.deleted && !a.preAssigned);
   // We render per-WS docs by iterating assignments and using a sub-component
   // per assignment that subscribes to the worksheetSubmissions subcollection.
   return (
@@ -8935,8 +8987,15 @@ function TutorPerWsAssignmentRow({studentId, assignment, open, onToggle, regrade
   // tutor end and say pending for ones that have yet to be completed.'
   // We render even if no per-WS doc exists yet so the tutor can see
   // the full PSM picture.
+  //
+  // Session 18C v23: BUT skip the whole assignment row if there are
+  // zero per-WS docs (i.e. this PSM was only ever submitted via the
+  // legacy whole-PSM path, OR was never touched at all). The legacy
+  // missed-question report renders right below this section and would
+  // double-display the same PSM otherwise. Once any per-WS doc exists,
+  // we show the full picture (with not-started chips for the rest).
   const anyDoc = worksheets.some(w => !!perWs.byWorksheet[w.id]);
-  if(!anyDoc && worksheets.length === 0){
+  if(!anyDoc){
     return null;
   }
   // Count by status for the row header.
