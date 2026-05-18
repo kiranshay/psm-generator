@@ -670,10 +670,21 @@ async function parseWelledReport(file){
   }
 
   // Anchor: find the section-scores block.
+  // Session 18C v22: the "<NNN> 200 to 800" scale-label pattern often
+  // appears in the column-aware xSortedText pass (which comes AFTER
+  // fullText in textForSearch). A 1200-char window from the TOTAL SCORE
+  // anchor in fullText routinely misses it, so parser falls back to the
+  // tight label grab which catches "Math\n\n\n            800" — i.e.
+  // the SCALE LABEL "800" instead of the actual score. Fix: ALWAYS
+  // include the entire xSortedText in the search block, so the scale-
+  // label pattern wins whenever it's present anywhere in the doc.
   const anchorMatch = textForSearch.match(/TOTAL\s*SCORE/i);
-  const scoreBlock = anchorMatch
+  const anchoredSlice = anchorMatch
     ? textForSearch.slice(anchorMatch.index, anchorMatch.index + 1200)
     : textForSearch.slice(0, 2000);
+  // Combine anchored slice with the column-aware pass. The separator
+  // newline keeps regex word/line anchors honest across the join.
+  const scoreBlock = anchoredSlice + "\n" + xSortedText;
 
   // 1. Total — try total-range first (400 to 1600), fall back to tight
   // label-anchored grab.
@@ -1148,6 +1159,55 @@ function useTutorSubmissions(studentId){
     return ()=>unsub();
   }, [studentId]);
   return state;
+}
+
+// Session 18C v22: aggregate per-WS submissions across ALL of a student's
+// assignments. Returns [{aid, wsId, doc}] suitable for allScoreDataPoints'
+// `perWsSubmissions` arg, so per-WS grades flow into the score-tracking
+// pipeline (domain + subskill cards). Previously allScoreDataPoints accepted
+// this arg but no caller provided it, so per-WS submissions never appeared
+// in score tracking — that's the "LinFns Hard isn't counting" bug.
+function useStudentAllPerWsSubmissions(studentId, assignments){
+  const aidsKey = useMemo(
+    () => (assignments||[]).map(a => a && a.id).filter(Boolean).sort().join(","),
+    [assignments]
+  );
+  const [entries, setEntries] = useState([]);
+  useEffect(()=>{
+    if(!studentId || !aidsKey){
+      setEntries([]);
+      return;
+    }
+    const aids = aidsKey.split(",").filter(Boolean);
+    // Mutable map kept across snapshot callbacks so updates from one
+    // assignment don't wipe out the others.
+    const docsByAid = {};
+    aids.forEach(aid => { docsByAid[aid] = {}; });
+    const rebuild = () => {
+      const out = [];
+      for(const aid of Object.keys(docsByAid)){
+        const wsMap = docsByAid[aid] || {};
+        for(const wsId of Object.keys(wsMap)){
+          out.push({aid, wsId, doc: wsMap[wsId]});
+        }
+      }
+      setEntries(out);
+    };
+    const unsubs = aids.map(aid => {
+      const col = studentAssignmentWorksheetSubmissionsCollection(studentId, aid);
+      if(!col) return ()=>{};
+      return col.onSnapshot(snap => {
+        const byWs = {};
+        snap.forEach(d => { byWs[d.id] = {id:d.id, ...d.data()}; });
+        docsByAid[aid] = byWs;
+        rebuild();
+      }, (err)=>{
+        console.warn("[useStudentAllPerWsSubmissions] snapshot error:", aid, err);
+      });
+    });
+    return ()=>{ unsubs.forEach(u => { try{ u(); } catch { /**/ } }); };
+  }, [studentId, aidsKey]);
+  return entries;
 }
 
 // Fetches display metadata ({id, name, grade}) for a small list of children
@@ -5013,8 +5073,14 @@ function StudentSummaryCard({student}){
 
   // Recent score breakdown — most recent data point per domain and per subdomain
   // Session 18A: include graded submissions so the breakdown reflects portal grading.
+  // Session 18C v22: also include per-WS subcollection submissions so the
+  // new per-worksheet submit path feeds the summary card.
   const {submissions: summarySubmissions} = useTutorSubmissions(student?.id);
-  const scorePts = useMemo(()=>allScoreDataPoints(student, summarySubmissions),[student, summarySubmissions]);
+  const summaryPerWs = useStudentAllPerWsSubmissions(student?.id, student?.assignments);
+  const scorePts = useMemo(
+    ()=>allScoreDataPoints(student, summarySubmissions, summaryPerWs),
+    [student, summarySubmissions, summaryPerWs]
+  );
   const latestDomainByKey = useMemo(()=>{
     const m = {};
     scorePts.forEach(pt=>{
@@ -6253,7 +6319,10 @@ class PortalErrorBoundary extends React.Component {
 // the ErrorBoundary fallback so students always see SOMETHING even if
 // the new ScoreHistoryPanel mirror errors out.
 function _LegacyPortalTrackingTab({student, submissions}){
-  const pts = allScoreDataPoints(student, submissions);
+  // Session 18C v22: feed per-WS submissions so this fallback view also
+  // shows graded per-worksheet submissions.
+  const legacyPerWs = useStudentAllPerWsSubmissions(student?.id, student?.assignments);
+  const pts = allScoreDataPoints(student, submissions, legacyPerWs);
   const diagProfile = (student.diagnostics||[]).length ? buildDiagnosticProfile(student.diagnostics) : null;
   const welled = (student.welledLogs||[]).filter(l=>!l.deleted);
 
@@ -7876,6 +7945,41 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
     );
   }
 
+  // Session 18C v22: compute "effective" perQuestion/score for the chip
+  // grid + per-row result indicators. Per-WS doc is the primary source,
+  // BUT if it lacks perQuestion (e.g. grader hasn't run yet, or this WS
+  // was originally submitted under the legacy whole-PSM path), fall back
+  // to the legacy submission's perQuestion filtered to this worksheet.
+  // Without this overlay, submitted worksheets show "Submitted · Score
+  // pending…" forever with no chip grid even though the legacy doc has
+  // the per-question results — that's the "Review button works but no
+  // per-question breakdown shows" bug.
+  const effectivePerQuestion = useMemo(()=>{
+    const docPq = Array.isArray(doc?.perQuestion) ? doc.perQuestion : [];
+    if(docPq.length > 0) return docPq;
+    if(legacySubmission && Array.isArray(legacySubmission.perQuestion)){
+      const fromLegacy = legacySubmission.perQuestion.filter(
+        p => p && p.worksheetId === currentWsId
+      );
+      if(fromLegacy.length > 0) return fromLegacy;
+    }
+    return [];
+  }, [doc, legacySubmission, currentWsId]);
+  const effectiveScoreCorrect = useMemo(()=>{
+    if(typeof doc?.scoreCorrect === "number") return doc.scoreCorrect;
+    if(effectivePerQuestion.length > 0){
+      return effectivePerQuestion.filter(p => p && p.correct === true).length;
+    }
+    return null;
+  }, [doc, effectivePerQuestion]);
+  const effectiveScoreTotal = useMemo(()=>{
+    if(typeof doc?.scoreTotal === "number") return doc.scoreTotal;
+    if(effectivePerQuestion.length > 0){
+      return effectivePerQuestion.filter(p => p && (p.correct === true || p.correct === false)).length;
+    }
+    return null;
+  }, [doc, effectivePerQuestion]);
+
   // Banner: graded? submitted? draft?
   // Session 18C v16: always show a status banner so the student knows
   // what state their work is in (graded, pending, saved as draft, or
@@ -7883,8 +7987,8 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
   // silent and the student couldn't tell if their work was saved.
   let banner = null;
   if(localStatus === "submitted"){
-    if(typeof doc?.scoreCorrect === "number"){
-      const correct = doc.scoreCorrect, total = doc.scoreTotal;
+    if(typeof effectiveScoreCorrect === "number" && typeof effectiveScoreTotal === "number"){
+      const correct = effectiveScoreCorrect, total = effectiveScoreTotal;
       banner = {
         text: `Submitted · Graded: ${correct} / ${total}`,
         color: correct === total ? "#4C7A4C" : correct === 0 ? "#8C2E2E" : "#9A5B1F",
@@ -7981,12 +8085,14 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
         </div>
       )}
 
-      {/* Review chip grid only after submission, like SubmissionEditor */}
-      {localStatus === "submitted" && Array.isArray(doc?.perQuestion) && doc.perQuestion.length > 0 && (
+      {/* Review chip grid only after submission, like SubmissionEditor.
+          Session 18C v22: uses effectivePerQuestion which falls back to
+          legacy perQuestion when the per-WS doc lacks it. */}
+      {localStatus === "submitted" && effectivePerQuestion.length > 0 && (
         <SubmissionReviewGrid
           worksheets={[worksheet]}
-          perQuestion={(doc.perQuestion || []).map(p => ({...p, worksheetId: currentWsId}))}
-          responses={(doc.responses || []).map(r => ({...r, worksheetId: currentWsId}))}
+          perQuestion={effectivePerQuestion.map(p => ({...p, worksheetId: currentWsId}))}
+          responses={(doc?.responses || []).map(r => ({...r, worksheetId: currentWsId}))}
         />
       )}
 
@@ -8001,7 +8107,7 @@ function SingleWorksheetEditor({studentId, assignment, worksheetId, readOnly, on
         indexLabel={`Worksheet · ${worksheet.title || ""}`}
         results={localStatus === "submitted" ? (() => {
           const out = [];
-          for(const pq of (doc?.perQuestion || [])){
+          for(const pq of effectivePerQuestion){
             if(pq && typeof pq.questionIndex === "number") out[pq.questionIndex] = pq;
           }
           return out;
@@ -9522,7 +9628,12 @@ function ScoreHistoryPanel({p, sfm, setSfm, addScore, delScore, addWelledLog, de
   // returns {submissions:[], error}, so an auth-timing failure on the
   // student-portal path won't propagate up and blank the portal.
   const {submissions: panelSubmissions} = useTutorSubmissions(p?.id);
-  const pts = allScoreDataPoints(p, panelSubmissions || []);
+  // Session 18C v22: per-WS subcollection submissions are now the primary
+  // path. Aggregate them across all of this student's assignments so the
+  // per-WS grades show up in domain + subskill charts. Without this,
+  // submissions like "LinFns Hard" via per-WS submit never reach scoring.
+  const panelPerWs = useStudentAllPerWsSubmissions(p?.id, p?.assignments);
+  const pts = allScoreDataPoints(p, panelSubmissions || [], panelPerWs || []);
   const [expanded,setExpanded] = useState({}); // {domainKey: true}
   const [diffFilter,setDiffFilter] = useState("all"); // all|easy|medium|hard|comprehensive
   const [wlog,setWlog] = useState({date:todayStr(),subject:"Reading & Writing",domain:"Information & Ideas",difficulty:"medium",score:"",notes:""});
@@ -10252,6 +10363,22 @@ function allScoreDataPoints(student, submissions = [], perWsSubmissions = []){
         _label: `${wsLabel} (submitted)`,
         _aid: entry.aid, _wsId: entry.wsId,
       });
+    } else {
+      // Session 18C v22: no subskill mapped and not Comp-prefixed —
+      // emit a DOMAIN-level fallback so the grade isn't silently dropped.
+      // Mirrors the legacy whole-PSM fallback added in v20.
+      pts.push({
+        date: dateStr,
+        category: `${w.subject||"Unknown"} — ${w.domain||"Unknown"}`,
+        subcategory: w.domain,
+        subject: w.subject, domain: w.domain,
+        score: correct, max: total, pct,
+        source: "submission_graded_perws",
+        difficulty: w.difficulty,
+        level: "domain",
+        _label: `${wsLabel} (submitted, no subskill mapped)`,
+        _aid: entry.aid, _wsId: entry.wsId,
+      });
     }
   });
   return pts.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
@@ -10261,7 +10388,11 @@ function allScoreDataPoints(student, submissions = [], perWsSubmissions = []){
 function ScoresTab({students,openProfile}){
   const[selSt,setSelSt]=useState(students[0]?.id||"");
   const st = students.find(s=>s.id===selSt)||students[0];
-  const pts = st?allScoreDataPoints(st):[];
+  // Session 18C v22: include per-WS submissions so the Scores tab
+  // matches the rest of the score-tracking surface.
+  const stSubs = useTutorSubmissions(st?.id);
+  const stPerWs = useStudentAllPerWsSubmissions(st?.id, st?.assignments);
+  const pts = st?allScoreDataPoints(st, stSubs?.submissions||[], stPerWs||[]):[];
 
   // Group by subcategory. For WellEd domain entries, further split by difficulty.
   const groups = useMemo(()=>{
