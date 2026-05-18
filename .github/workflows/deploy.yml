@@ -34,10 +34,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Set up Node (for esbuild parse check)
+      - name: Set up Node (for esbuild parse check + functions deploy)
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # Matches the functions runtime (engines.node = "22" in
+          # functions/package.json) so `npm ci` resolves the same
+          # platform-specific deps that will run in production.
+          node-version: "22"
 
       # ── Pre-deploy verification ────────────────────────────────────────
       # Deploy is its own source of truth — it re-runs the parse + build
@@ -86,3 +89,33 @@ jobs:
             --only hosting \
             --project psm-generator \
             --non-interactive
+
+      # ── Cloud Functions deploy (Session 18C v24) ──────────────────────
+      # Previously the deploy job only shipped hosting, which meant every
+      # functions/ change (grader, regrade, reset, audit logging, etc.)
+      # since fc31dba had been silently sitting in main without reaching
+      # Firebase. That's why per-WS submissions stopped showing
+      # per-question annotations — the trigger that's actually running
+      # was the months-old original.
+      #
+      # Functions deploy runs AFTER hosting + with continue-on-error so a
+      # missing IAM perm doesn't block hosting. The deploy log will name
+      # the exact missing role if the github-deployer SA needs more
+      # access (roles/cloudfunctions.developer, roles/run.admin,
+      # roles/cloudbuild.builds.editor, roles/storage.objectAdmin,
+      # roles/iam.serviceAccountUser).
+      #
+      # Predeploy hook in firebase.json copies worksheets_catalog.json
+      # into the functions bundle so loadCatalogByTitle() can read it.
+      - name: Install functions deps
+        working-directory: functions
+        run: npm ci --no-audit --no-fund
+
+      - name: Deploy Cloud Functions
+        continue-on-error: true
+        run: |
+          npx --yes firebase-tools@13 deploy \
+            --only functions \
+            --project psm-generator \
+            --non-interactive \
+            --force

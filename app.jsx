@@ -6318,6 +6318,54 @@ class PortalErrorBoundary extends React.Component {
   }
 }
 
+// Session 18C v25: error boundary specifically for the per-worksheet
+// editor. Renders the actual error message + a "Back to PSM" button
+// so the student isn't stuck on a white screen and so we can see what
+// crashed in their console / their screenshot. Previously a render
+// error in SingleWorksheetEditor unmounted the whole tree without
+// surfacing anything visible.
+class SingleWorksheetEditorBoundary extends React.Component {
+  constructor(props){ super(props); this.state = {hasError:false, error:null}; }
+  static getDerivedStateFromError(error){ return {hasError:true, error}; }
+  componentDidCatch(error, info){
+    console.error("[SingleWorksheetEditorBoundary] crash:", error, info);
+  }
+  render(){
+    if(!this.state.hasError) return this.props.children;
+    const msg = this.state.error && (this.state.error.message || String(this.state.error)) || "Unknown error";
+    return (
+      <div style={{
+        background:"#fff", border:"1px solid rgba(140,46,46,.4)", borderRadius:6,
+        padding:"24px 22px", margin:"12px 0",
+      }}>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:1.4,color:"#8C2E2E",textTransform:"uppercase",marginBottom:8}}>
+          Editor error
+        </div>
+        <div style={{fontFamily:"'Fraunces',Georgia,serif",fontSize:16,color:"#0F1A2E",marginBottom:12,letterSpacing:-.1}}>
+          The worksheet editor hit an error and couldn't render.
+        </div>
+        <div style={{
+          fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#7A2020",
+          background:"#FAF7F2", padding:"10px 12px", borderRadius:4,
+          border:"1px solid rgba(140,46,46,.25)",
+          whiteSpace:"pre-wrap", wordBreak:"break-word", marginBottom:14,
+        }}>
+          {msg}
+        </div>
+        {this.props.onClose && (
+          <button onClick={this.props.onClose} style={{
+            background:"transparent", color:"#0F1A2E",
+            border:"1px solid rgba(15,26,46,.25)",
+            padding:"8px 14px", borderRadius:4,
+            fontFamily:"'IBM Plex Mono',monospace", fontSize:11, fontWeight:600,
+            letterSpacing:.5, textTransform:"uppercase", cursor:"pointer",
+          }}>← Back to PSM</button>
+        )}
+      </div>
+    );
+  }
+}
+
 // Legacy compact view — was the portal tracking tab before v4. Kept as
 // the ErrorBoundary fallback so students always see SOMETHING even if
 // the new ScoreHistoryPanel mirror errors out.
@@ -8188,14 +8236,23 @@ function SubmissionEditor({studentId, assignment, readOnly, onClose, focusWorksh
   // that writes to worksheetSubmissions/{wsId} ONLY (never touches the
   // legacy whole-PSM submission). Fixes the bug where submitting one
   // worksheet locked all the others.
+  //
+  // Session 18C v25: wrap in an error boundary so any future render
+  // crash in SingleWorksheetEditor (e.g. a malformed per-WS doc, an
+  // unexpected catalog shape) surfaces a readable message instead of
+  // unmounting the entire tree and leaving a white screen.
   if(focusWorksheetId){
-    return <SingleWorksheetEditor
-      studentId={studentId}
-      assignment={assignment}
-      worksheetId={focusWorksheetId}
-      readOnly={readOnly}
-      onClose={onClose}
-    />;
+    return (
+      <SingleWorksheetEditorBoundary onClose={onClose}>
+        <SingleWorksheetEditor
+          studentId={studentId}
+          assignment={assignment}
+          worksheetId={focusWorksheetId}
+          readOnly={readOnly}
+          onClose={onClose}
+        />
+      </SingleWorksheetEditorBoundary>
+    );
   }
   const {status, submission} = useSubmissionDraft(studentId, assignment.id);
   const {status: catalogStatus, catalog} = useWorksheetCatalog();
